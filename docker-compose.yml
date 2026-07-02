@@ -1,0 +1,70 @@
+# Two ways to use this file:
+#
+#   Development (database only, run backend/frontend yourself):
+#     docker compose up -d
+#
+#   Everything in containers (copy .env.example to .env first):
+#     docker compose --profile app up -d --build
+#
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sahayak-postgres
+    environment:
+      POSTGRES_DB: agentdb
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-agent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - sahayak-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agentdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: sahayak-backend
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      APP_DEFAULT_AI: ${APP_DEFAULT_AI:-}
+      DB_URL: jdbc:postgresql://postgres:5432/agentdb
+      DB_USER: agent
+      DB_PASSWORD: ${DB_PASSWORD:-agent}
+      APP_SECRET: ${APP_SECRET:-}
+      APP_ALLOW_SIGNUPS: ${APP_ALLOW_SIGNUPS:-true}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5173}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID:-}
+      LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET:-}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8080:8080"
+    volumes:
+      # Keeps the auto-generated app secret across container rebuilds
+      # (irrelevant if you set APP_SECRET in .env, which is recommended).
+      - sahayak-secret:/root/.sahayak
+
+  frontend:
+    build: ./frontend
+    container_name: sahayak-frontend
+    profiles: ["app"]
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  sahayak-pgdata:
+  sahayak-secret:

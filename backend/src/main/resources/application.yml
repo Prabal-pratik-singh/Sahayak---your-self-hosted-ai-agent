@@ -1,0 +1,91 @@
+spring:
+  application:
+    name: sahayak
+
+  threads:
+    virtual:
+      enabled: true
+
+  autoconfigure:
+    # OpenAI's and Google's auto-configs refuse to start when their API key is
+    # blank, but every provider must stay optional here — so AiConfig builds
+    # those chat models manually, only when their key is actually set.
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionAutoConfiguration
+      - org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/agentdb}
+    username: ${DB_USER:agent}
+    password: ${DB_PASSWORD:agent}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+  ai:
+    # Set the API key of every provider you want available; any subset works.
+    anthropic:
+      # https://console.anthropic.com
+      api-key: ${ANTHROPIC_API_KEY:}
+      chat:
+        options:
+          model: ${ANTHROPIC_MODEL:claude-sonnet-5}
+          max-tokens: ${ANTHROPIC_MAX_TOKENS:4096}
+    openai:
+      # https://platform.openai.com/api-keys
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-5-mini}
+    google:
+      genai:
+        # https://aistudio.google.com/apikey
+        api-key: ${GEMINI_API_KEY:}
+        chat:
+          options:
+            model: ${GEMINI_MODEL:gemini-2.5-flash}
+    chat:
+      client:
+        # We build one ChatClient per provider ourselves (see AiConfig).
+        enabled: false
+      memory:
+        repository:
+          jdbc:
+            # Creates the chat-history table in Postgres on first start.
+            initialize-schema: always
+
+server:
+  port: 8080
+
+app:
+  # Which configured AI provider answers by default: anthropic | openai | gemini.
+  # Blank = the first configured one (in that order).
+  default-ai: ${APP_DEFAULT_AI:}
+  # Long random string. Protects login tokens and encrypts stored app passwords.
+  # If empty, one is generated and saved to <home>/.sahayak/app-secret.txt
+  secret: ${APP_SECRET:}
+  # Where the browser app lives (used for redirects after connecting LinkedIn, and CORS).
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
+  # Public address of this backend (used to build the LinkedIn OAuth redirect URL).
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  # Set to false to stop new people from registering (existing accounts keep working).
+  allow-signups: ${APP_ALLOW_SIGNUPS:true}
+  # Max chat messages per user per minute (each message costs Anthropic API credits).
+  chat-rate-limit-per-minute: ${APP_CHAT_RATE_LIMIT:30}
+  linkedin:
+    # Create an app at https://developer.linkedin.com to enable LinkedIn posting.
+    client-id: ${LINKEDIN_CLIENT_ID:}
+    client-secret: ${LINKEDIN_CLIENT_SECRET:}
+
+logging:
+  level:
+    org.springframework.ai: INFO
