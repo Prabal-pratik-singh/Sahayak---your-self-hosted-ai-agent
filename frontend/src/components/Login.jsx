@@ -31,12 +31,14 @@ export default function Login({ onLogin }) {
     <div className="auth">
       <div className="auth-card">
         <div className="brand auth-brand">
+          <span className="orb" aria-hidden="true" />
           <span className="wordmark">Sahayak</span>
-          <span className="tagline">ops agent</span>
+          <span className="tagline">personal agent</span>
         </div>
         <p className="auth-blurb">
-          Your personal AI agent: it chats, sends email from your account, posts on your
-          LinkedIn, and runs tasks at the time you pick.
+          Your personal AI agent: talk to it by voice or text — it answers, looks things up,
+          remembers what matters, emails from your account, posts on your LinkedIn, and runs
+          tasks at the time you pick.
         </p>
 
         <div className="tabs">
@@ -61,7 +63,7 @@ export default function Login({ onLogin }) {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Abhishek"
+                placeholder="Prabal"
                 maxLength={60}
                 required
               />

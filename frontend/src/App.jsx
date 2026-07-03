@@ -88,8 +88,9 @@ export default function App() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
+          <span className="orb" aria-hidden="true" />
           <span className="wordmark">Sahayak</span>
-          <span className="tagline">ops agent</span>
+          <span className="tagline">personal agent</span>
         </div>
         <div className="topbar-right">
           <span className={`status ${online ? 'on' : 'off'}`}>
