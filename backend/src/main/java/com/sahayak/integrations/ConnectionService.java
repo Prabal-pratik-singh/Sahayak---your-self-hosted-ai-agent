@@ -28,6 +28,14 @@ public class ConnectionService {
     private record LinkedInConfig(String accessToken, String personSub) {
     }
 
+    /** A user's own Telegram bot + the chat it writes to. */
+    public record TelegramConfig(String botToken, String chatId) {
+    }
+
+    /** A single secret webhook URL (Discord / Slack incoming webhooks). */
+    public record WebhookConfig(String url) {
+    }
+
     private final ConnectionRepository repository;
     private final CryptoService crypto;
     private final ObjectMapper objectMapper;
@@ -81,18 +89,57 @@ public class ConnectionService {
                 });
     }
 
+    public ConnectionInfo saveTelegram(Long userId, TelegramConfig config, String botUsername) {
+        Connection connection = upsert(userId, Connection.Type.TELEGRAM);
+        connection.setDisplayName("@" + botUsername + " → chat " + config.chatId());
+        connection.setEncryptedConfig(crypto.encrypt(toJson(config)));
+        connection.setExpiresAt(null);
+        return ConnectionInfo.from(repository.save(connection));
+    }
+
+    public Optional<TelegramConfig> telegramConfig(Long userId) {
+        return repository.findByUserIdAndType(userId, Connection.Type.TELEGRAM)
+                .map(c -> fromJson(crypto.decrypt(c.getEncryptedConfig()), TelegramConfig.class));
+    }
+
+    public ConnectionInfo saveWebhook(Long userId, Connection.Type type, String url, String displayName) {
+        Connection connection = upsert(userId, type);
+        connection.setDisplayName(displayName);
+        connection.setEncryptedConfig(crypto.encrypt(toJson(new WebhookConfig(url))));
+        connection.setExpiresAt(null);
+        return ConnectionInfo.from(repository.save(connection));
+    }
+
+    public Optional<String> webhookUrl(Long userId, Connection.Type type) {
+        return repository.findByUserIdAndType(userId, type)
+                .map(c -> fromJson(crypto.decrypt(c.getEncryptedConfig()), WebhookConfig.class).url());
+    }
+
     /** One-line-per-app summary injected into the system prompt so the model knows what it can really do. */
     public String promptSummary(Long userId) {
         StringBuilder sb = new StringBuilder();
         sb.append(emailSettings(userId)
                 .map(s -> "- Email sending: CONNECTED (sends from " + s.effectiveFrom() + ").")
-                .orElse("- Email sending: NOT connected. The user can add it in the Connections panel (top-right of the app)."));
+                .orElse("- Email sending: NOT connected."));
         sb.append('\n');
         sb.append(linkedInAccount(userId)
                 .map(a -> a.expired()
-                        ? "- LinkedIn posting: connection EXPIRED. The user must reconnect LinkedIn in the Connections panel."
+                        ? "- LinkedIn posting: connection EXPIRED. The user must reconnect LinkedIn on the Integrations page."
                         : "- LinkedIn posting: CONNECTED (posts as " + a.displayName() + ").")
-                .orElse("- LinkedIn posting: NOT connected. The user can add it in the Connections panel (top-right of the app)."));
+                .orElse("- LinkedIn posting: NOT connected."));
+        sb.append('\n');
+        sb.append(telegramConfig(userId).isPresent()
+                ? "- Telegram: CONNECTED (sendTelegramMessage works)."
+                : "- Telegram: NOT connected.");
+        sb.append('\n');
+        sb.append(webhookUrl(userId, Connection.Type.DISCORD).isPresent()
+                ? "- Discord: CONNECTED (sendDiscordMessage works)."
+                : "- Discord: NOT connected.");
+        sb.append('\n');
+        sb.append(webhookUrl(userId, Connection.Type.SLACK).isPresent()
+                ? "- Slack: CONNECTED (sendSlackMessage works)."
+                : "- Slack: NOT connected.");
+        sb.append("\nFor anything NOT connected, the user can set it up on the Integrations page.");
         return sb.toString();
     }
 

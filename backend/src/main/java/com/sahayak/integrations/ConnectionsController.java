@@ -3,6 +3,8 @@ package com.sahayak.integrations;
 import com.sahayak.auth.AuthenticatedUser;
 import com.sahayak.integrations.email.EmailService;
 import com.sahayak.integrations.email.EmailSettings;
+import com.sahayak.integrations.messaging.TelegramService;
+import com.sahayak.integrations.messaging.WebhookService;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -35,12 +37,28 @@ public class ConnectionsController {
             @Email @Size(max = 190) String fromAddress) {
     }
 
+    public record TelegramConnectionRequest(
+            @NotBlank @Size(max = 100) String botToken,
+            @NotBlank @Size(max = 40) String chatId) {
+    }
+
+    public record WebhookConnectionRequest(
+            @NotBlank @Size(max = 500) String webhookUrl) {
+    }
+
     private final ConnectionService connectionService;
     private final EmailService emailService;
+    private final TelegramService telegramService;
+    private final WebhookService webhookService;
 
-    public ConnectionsController(ConnectionService connectionService, EmailService emailService) {
+    public ConnectionsController(ConnectionService connectionService,
+                                 EmailService emailService,
+                                 TelegramService telegramService,
+                                 WebhookService webhookService) {
         this.connectionService = connectionService;
         this.emailService = emailService;
+        this.telegramService = telegramService;
+        this.webhookService = webhookService;
     }
 
     @GetMapping
@@ -58,6 +76,38 @@ public class ConnectionsController {
                 request.fromAddress() != null ? request.fromAddress().trim() : null);
         emailService.verify(settings);
         ConnectionInfo saved = connectionService.saveEmail(AuthenticatedUser.from(authentication).id(), settings);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    /** Connects the user's own Telegram bot; a test message proves token + chat id work. */
+    @PostMapping("/telegram")
+    public ResponseEntity<ConnectionInfo> connectTelegram(@Validated @RequestBody TelegramConnectionRequest request,
+                                                          Authentication authentication) {
+        String botUsername = telegramService.verify(request.botToken().trim(), request.chatId().trim());
+        ConnectionInfo saved = connectionService.saveTelegram(
+                AuthenticatedUser.from(authentication).id(),
+                new ConnectionService.TelegramConfig(request.botToken().trim(), request.chatId().trim()),
+                botUsername);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    @PostMapping("/discord")
+    public ResponseEntity<ConnectionInfo> connectDiscord(@Validated @RequestBody WebhookConnectionRequest request,
+                                                         Authentication authentication) {
+        String url = request.webhookUrl().trim();
+        webhookService.verifyDiscord(url);
+        ConnectionInfo saved = connectionService.saveWebhook(
+                AuthenticatedUser.from(authentication).id(), Connection.Type.DISCORD, url, "Discord channel");
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    @PostMapping("/slack")
+    public ResponseEntity<ConnectionInfo> connectSlack(@Validated @RequestBody WebhookConnectionRequest request,
+                                                       Authentication authentication) {
+        String url = request.webhookUrl().trim();
+        webhookService.verifySlack(url);
+        ConnectionInfo saved = connectionService.saveWebhook(
+                AuthenticatedUser.from(authentication).id(), Connection.Type.SLACK, url, "Slack channel");
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 

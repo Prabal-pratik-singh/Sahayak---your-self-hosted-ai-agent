@@ -35,7 +35,7 @@ class AuthServiceTest {
             return user;
         });
 
-        var result = service.register("Abhishek", "ME@Example.com", "secret-pass-123");
+        var result = service.register("Prabal", "ME@Example.com", "secret-pass-123");
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());

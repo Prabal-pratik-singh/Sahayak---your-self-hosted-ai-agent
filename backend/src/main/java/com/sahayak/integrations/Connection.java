@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 @Table(name = "connections", uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "type"}))
 public class Connection {
 
-    public enum Type {EMAIL, LINKEDIN}
+    public enum Type {EMAIL, LINKEDIN, TELEGRAM, DISCORD, SLACK}
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

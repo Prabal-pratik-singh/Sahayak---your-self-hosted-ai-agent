@@ -42,6 +42,7 @@ public class SecurityConfig {
                                 "/api/health",
                                 "/api/auth/register",
                                 "/api/auth/login",
+                                "/api/contact",
                                 "/api/integrations/linkedin/callback",
                                 "/error")
                         .permitAll()

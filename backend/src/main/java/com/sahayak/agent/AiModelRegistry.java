@@ -77,4 +77,10 @@ public class AiModelRegistry {
         String id = (requestedId == null || requestedId.isBlank()) ? defaultId : requestedId.trim().toLowerCase();
         return providers.containsKey(id) ? id : defaultId;
     }
+
+    /** Human name for a provider id ("gemini" → "Gemini"), for error messages. */
+    public String labelOf(String providerId) {
+        Provider provider = providers.get(providerId);
+        return provider != null ? provider.option().label() : providerId;
+    }
 }

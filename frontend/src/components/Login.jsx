@@ -1,5 +1,14 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api, tokenStore } from '../api.js'
+import { SparkIcon } from './Icons.jsx'
+
+const FEATURES = [
+  'Talk by voice or text — it answers, acts, and remembers',
+  'Live weather, Wikipedia and web lookups built in',
+  'Email, LinkedIn, Telegram, Discord & Slack — your own accounts',
+  'Schedule anything: "post this tomorrow at 6 PM"',
+]
 
 export default function Login({ onLogin }) {
   const [mode, setMode] = useState('login')
@@ -29,28 +38,42 @@ export default function Login({ onLogin }) {
 
   return (
     <div className="auth">
-      <div className="auth-card">
-        <div className="brand auth-brand">
-          <span className="orb" aria-hidden="true" />
-          <span className="wordmark">Sahayak</span>
-          <span className="tagline">personal agent</span>
+      <div className="auth-hero">
+        <div className="side-brand">
+          <span className="orb big" aria-hidden="true" />
+          <span className="wordmark xl">Sahayak</span>
         </div>
-        <p className="auth-blurb">
-          Your personal AI agent: talk to it by voice or text — it answers, looks things up,
-          remembers what matters, emails from your account, posts on your LinkedIn, and runs
-          tasks at the time you pick.
-        </p>
+        <h1>
+          Your personal AI agent.
+          <br />
+          <span className="grad-text">Self-hosted. Actually yours.</span>
+        </h1>
+        <ul className="auth-features">
+          {FEATURES.map((f) => (
+            <li key={f}>
+              <SparkIcon /> {f}
+            </li>
+          ))}
+        </ul>
+      </div>
 
+      <div className="auth-card card">
         <div className="tabs">
           <button
             className={mode === 'login' ? 'tab active' : 'tab'}
-            onClick={() => { setMode('login'); setError('') }}
+            onClick={() => {
+              setMode('login')
+              setError('')
+            }}
           >
             Log in
           </button>
           <button
             className={mode === 'register' ? 'tab active' : 'tab'}
-            onClick={() => { setMode('register'); setError('') }}
+            onClick={() => {
+              setMode('register')
+              setError('')
+            }}
           >
             Create account
           </button>
@@ -92,10 +115,16 @@ export default function Login({ onLogin }) {
 
           {error && <p className="error-text">{error}</p>}
 
-          <button className="send wide" type="submit" disabled={busy}>
+          <button className="btn wide" type="submit" disabled={busy}>
             {busy ? 'One moment…' : mode === 'login' ? 'Log in' : 'Create account'}
           </button>
         </form>
+
+        <nav className="auth-site-links" aria-label="About this project">
+          <Link to="/about">About</Link>
+          <Link to="/services">Services</Link>
+          <Link to="/contact">Contact</Link>
+        </nav>
       </div>
     </div>
   )

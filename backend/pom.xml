@@ -13,9 +13,9 @@
 
     <groupId>com.sahayak</groupId>
     <artifactId>sahayak-backend</artifactId>
-    <version>0.2.0</version>
+    <version>0.4.0</version>
     <name>sahayak-backend</name>
-    <description>Self-hosted AI agent: chat, send email, post on LinkedIn, schedule tasks — per user account</description>
+    <description>Self-hosted personal AI agent: chat, voice, web lookups, long-term memory, email, LinkedIn, scheduled tasks — per user account</description>
 
     <properties>
         <java.version>21</java.version>

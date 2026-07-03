@@ -1,12 +1,31 @@
 # Sahayak — your self-hosted AI agent
 
-Tell it what you want in plain language, and it does the work: chats like a normal AI assistant, **sends email from your own mailbox**, **posts on your own LinkedIn**, and **runs tasks at a scheduled time** ("post this tomorrow at 6 PM").
+Talk to it — by **voice or text** — and it does the work: answers anything, **checks live weather**, **reads web pages**, **remembers things about you**, **sends email from your own mailbox**, **posts on your own LinkedIn**, and **runs tasks at a scheduled time** ("post this tomorrow at 6 PM").
 
-Multi-user by design: anyone you share your server with creates their **own account** and connects their **own** email and LinkedIn. No third-party middleman (no Composio) — the server talks to Gmail/LinkedIn/etc. directly.
+Multi-user by design: anyone you share your server with creates their **own account** and connects their **own** email and LinkedIn. No third-party middleman (no Composio) — the server talks to the real APIs directly.
 
 **Pick your AI brain:** works with **Claude (Anthropic)**, **ChatGPT (OpenAI)**, and **Gemini (Google)**. Configure any one — or several, and every user gets a dropdown in the chat to choose who answers.
 
 **Stack:** Spring Boot 3.5 · Spring AI 1.1 · Claude / ChatGPT / Gemini · PostgreSQL · React (Vite)
+
+## What the agent can do
+
+| Ability | How | Needs setup? |
+| --- | --- | --- |
+| Chat with **streaming replies** | any configured AI provider, token by token | just an API key |
+| **Conversation history** | saved per user: sidebar, pin, rename-by-first-message, full-text search (Ctrl+K) | no |
+| Talk & listen (voice) | push-to-talk in chat + hands-free **Voice mode with a wake word** | no — use Chrome/Edge |
+| Live weather anywhere | built-in weather tool (Open-Meteo, no key) | no |
+| Facts & background | built-in Wikipedia search tool | no |
+| Read a web page you give it | built-in guarded page fetcher (private/internal addresses blocked) | no |
+| Remember things long-term | "remember that ..." → saved notes, used in every future chat | no |
+| Schedule anything for later | task board + calendar view + 30s runner | no |
+| Send email as you | your SMTP account | Integrations page |
+| Post on your LinkedIn | your LinkedIn via OAuth | Integrations page + LinkedIn app |
+| Message on **Telegram** | your own free bot (@BotFather) | Integrations page |
+| Post to **Discord / Slack** | channel incoming webhooks | Integrations page |
+
+Honestly **not** supported (platform API restrictions, shown as-is in the app): WhatsApp personal chats, personal Instagram, X/Twitter (paid API), personal Facebook. The Integrations page explains each.
 
 ---
 
@@ -88,9 +107,13 @@ Open **http://localhost:5173**.
 ## First steps in the app
 
 1. **Create account** — the first account on a fresh server is always allowed; set `APP_ALLOW_SIGNUPS=false` later to lock the door behind you.
-2. Chat normally. Try: *"Remind yourself to say hello in 2 minutes"* → watch the dispatch board.
-   If the server has more than one AI configured, a dropdown next to the message box picks who answers (Claude / ChatGPT / Gemini). All brains share the same chat memory, so you can switch mid-conversation. A scheduled task later runs on the same brain it was created with.
-3. Open **Connections** (top right) to give the agent real powers:
+2. Chat normally. Try:
+   - *"What's the weather in Delhi right now?"* → it uses its live weather tool.
+   - *"Remember that I prefer short replies"* → saved as a note, applied in every future chat.
+   - *"Remind yourself to say hello in 2 minutes"* → watch the dispatch board.
+3. **Voice**: tap the **mic** button, speak, and it sends automatically when you pause. Turn on the **speaker** button to have replies read out loud. Uses the browser's built-in speech engine — free, no keys; listening needs Chrome or Edge (the mic button hides itself elsewhere), speaking works in all major browsers.
+4. If the server has more than one AI configured, a dropdown next to the message box picks who answers (Claude / ChatGPT / Gemini). All brains share the same chat memory, so you can switch mid-conversation. A scheduled task later runs on the same brain it was created with.
+5. Open **Connections** (top right) to give the agent real powers:
 
 ### Connect your email (works with any provider)
 
@@ -170,12 +193,16 @@ backend/
       AgentService.java           # runs one turn with the user's own tools
       ChatController.java         # POST /api/chat (validated + rate-limited)
     auth/                         # accounts: User, tokens, login/register, security config
+    conversations/                # sidebar chats: titles, pinning, history, full-text search
+    web/                          # internet tools: weather, Wikipedia, guarded page fetch
+    notes/                        # long-term memory: notes the agent keeps per user
     integrations/
       Connection*.java            # per-user connected apps, credentials encrypted
       email/                      # SMTP: settings, sender, LLM tool
       linkedin/                   # LinkedIn: OAuth flow, API calls, LLM tool
+      messaging/                  # Telegram bot + Discord/Slack webhooks + LLM tools
     tasks/                        # scheduler: entity, atomic claiming, runner, API
-    common/                       # app secret, crypto, errors, rate limit, health
+    common/                       # app secret, crypto, errors, rate limit, schema fixes
   src/test/java/...               # unit tests (crypto, scheduler, auth)
 frontend/
   src/App.jsx                     # session + layout
@@ -197,7 +224,16 @@ All endpoints except the first three need an `Authorization: Bearer <token>` hea
 | GET | /api/auth/me | — | Who am I |
 | POST | /api/auth/logout | — | Revoke this token |
 | POST | /api/chat | `{message, conversationId, provider?}` | Talk to the agent (`provider`: anthropic/openai/gemini) |
+| POST | /api/chat/stream | same | Same, but the reply streams as Server-Sent Events |
 | GET | /api/models | — | Configured AI providers + default |
+| GET/POST | /api/conversations | `{title?}` | List / create sidebar conversations |
+| PATCH/DELETE | /api/conversations/{id} | `{title?, pinned?}` | Rename, pin or delete (deletes its messages too) |
+| GET | /api/conversations/{id}/messages | — | Full message history of one conversation |
+| GET | /api/conversations/search?q= | — | Full-text search across your chats |
+| POST | /api/contact | `{name, email, message}` | Public contact form (stored in DB, rate-limited) |
+| POST | /api/connections/telegram | `{botToken, chatId}` | Connect your Telegram bot (sends a test message) |
+| POST | /api/connections/discord | `{webhookUrl}` | Connect a Discord channel webhook |
+| POST | /api/connections/slack | `{webhookUrl}` | Connect a Slack channel webhook |
 | GET | /api/tasks | — | My scheduled tasks |
 | DELETE | /api/tasks/{id} | — | Cancel a pending task |
 | GET | /api/connections | — | My connected apps |
@@ -232,11 +268,15 @@ Add a connect button/form in `frontend/src/components/Connections.jsx`, and a li
 
 - **Startup fails: "No AI provider is configured"** → set at least one of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` in the same terminal (or `.env` for Docker) and start again.
 - **Chat says "The AI service returned an error"** → wrong/expired API key, or no credit, on the provider you selected in the dropdown.
+- **Chat says the rate limit is used up** → free-tier AI keys (especially Gemini) allow only a handful of requests per minute/day. Wait a minute, switch provider in the dropdown, or upgrade the key.
+- **Deploying to a real server** → see `DEPLOYMENT.md`.
 - **`Connection refused: localhost:5432`** → Postgres isn't up: `docker compose up -d`.
 - **"Could not log in to that mailbox"** → for Gmail you need an App Password (normal password won't work); check host/port for other providers.
 - **LinkedIn button says "not configured"** → set `LINKEDIN_CLIENT_ID`/`LINKEDIN_CLIENT_SECRET` and restart the backend.
 - **LinkedIn connect loops back with an error** → the redirect URL in your LinkedIn app must EXACTLY match `APP_BASE_URL + /api/integrations/linkedin/callback`.
 - **Frontend can't reach backend (dev)** → backend must be on 8080; Vite proxies `/api` there (see `frontend/vite.config.js`).
+- **Mic button is missing** → your browser has no speech recognition (Firefox/Safari) — use Chrome or Edge. Voice *output* (speaker button) works everywhere.
+- **Every chat message failed with "already exists" (pre-0.3.0)** → fixed: the chat-history table's conversation-id column was too short for real browser ids; 0.3.0 widens it automatically at startup.
 - **Scheduled task ran at a strange hour (Docker)** → set `TZ=Asia/Kolkata` (your zone) in `.env` and restart.
 - **Changed `APP_SECRET` and connections stopped working** → expected: stored credentials can only be decrypted with the secret that encrypted them. Reconnect your apps.
 
