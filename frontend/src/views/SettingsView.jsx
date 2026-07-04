@@ -1,11 +1,113 @@
+import { useEffect, useState } from 'react'
 import { useApp } from '../App.jsx'
+import { api } from '../api.js'
 import { speechSupported } from '../hooks/useSpeech.js'
 
 const ACCENTS = [
-  { id: 'amber', label: 'Amber' },
   { id: 'cyan', label: 'Cyan' },
+  { id: 'amber', label: 'Amber' },
   { id: 'violet', label: 'Violet' },
 ]
+
+const KEY_LINKS = {
+  anthropic: 'console.anthropic.com',
+  openai: 'platform.openai.com/api-keys',
+  gemini: 'aistudio.google.com/apikey',
+  groq: 'console.groq.com/keys (free tier)',
+}
+
+/** BYOK — paste your own API key per AI engine; it unlocks that brain for you. */
+function AiKeysCard() {
+  const { toast, refreshModels, refreshHealth } = useApp()
+  const [keys, setKeys] = useState(null)
+  const [inputs, setInputs] = useState({})
+  const [busyProvider, setBusyProvider] = useState('')
+
+  const load = () => api('/keys').then(setKeys).catch((e) => toast(e.message, 'error'))
+  useEffect(() => {
+    load()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const afterChange = () => {
+    load()
+    refreshModels()
+    refreshHealth()
+  }
+
+  const save = async (provider) => {
+    const apiKey = (inputs[provider] || '').trim()
+    if (!apiKey || busyProvider) return
+    setBusyProvider(provider)
+    try {
+      const res = await api(`/keys/${provider}`, { method: 'PUT', body: { apiKey } })
+      toast(res.warning || 'Key verified and saved ✓', res.warning ? 'info' : 'ok')
+      setInputs((s) => ({ ...s, [provider]: '' }))
+      afterChange()
+    } catch (e) {
+      toast(e.message, 'error')
+    } finally {
+      setBusyProvider('')
+    }
+  }
+
+  const remove = async (provider) => {
+    if (busyProvider) return
+    setBusyProvider(provider)
+    try {
+      await api(`/keys/${provider}`, { method: 'DELETE' })
+      toast('Key removed', 'ok')
+      afterChange()
+    } catch (e) {
+      toast(e.message, 'error')
+    } finally {
+      setBusyProvider('')
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="card-title">AI engine keys (bring your own)</div>
+      <p className="hint">
+        Paste your own API key to use an engine on your own quota — free keys exist for Gemini and
+        Groq. Keys are encrypted on the server and used only for your account.
+      </p>
+      {!keys && <p className="empty-line">Loading…</p>}
+      {keys?.map((k) => (
+        <div className="key-row" key={k.provider}>
+          <div className="key-head">
+            <b>{k.label}</b>
+            <span className="tag">{k.model}</span>
+            <span className={`chip ${k.hasKey ? 'ok' : k.serverAvailable ? '' : 'bad'}`}>
+              {k.hasKey ? 'your key' : k.serverAvailable ? 'server key' : 'no key'}
+            </span>
+          </div>
+          <div className="key-controls">
+            <input
+              className="input"
+              type="password"
+              placeholder={`Paste your ${k.label} key — get it at ${KEY_LINKS[k.provider] || 'the provider'}`}
+              value={inputs[k.provider] || ''}
+              onChange={(e) => setInputs((s) => ({ ...s, [k.provider]: e.target.value }))}
+              aria-label={`${k.label} API key`}
+            />
+            <button
+              className="btn"
+              disabled={busyProvider === k.provider || !(inputs[k.provider] || '').trim()}
+              onClick={() => save(k.provider)}
+            >
+              {busyProvider === k.provider ? 'Checking…' : k.hasKey ? 'Replace' : 'Save'}
+            </button>
+            {k.hasKey && (
+              <button className="btn ghost danger" disabled={busyProvider === k.provider} onClick={() => remove(k.provider)}>
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
 
 export default function SettingsView() {
   const { user, logout, settings, models } = useApp()
@@ -66,6 +168,8 @@ export default function SettingsView() {
         </div>
       </section>
 
+      <AiKeysCard />
+
       <section className="card">
         <div className="card-title">AI</div>
         <div className="setting-row">
@@ -75,10 +179,10 @@ export default function SettingsView() {
             value={settings.defaultProvider}
             onChange={(e) => settings.set({ defaultProvider: e.target.value })}
           >
-            <option value="">Server default</option>
+            <option value="">Automatic</option>
             {(models?.options || []).map((o) => (
               <option key={o.id} value={o.id}>
-                {o.label} ({o.model})
+                {o.label} ({o.model}){o.source === 'your key' ? ' · your key' : ''}
               </option>
             ))}
           </select>

@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
 @Service
 public class AgentService {
 
-    private final AiModelRegistry registry;
+    private final ProviderAccessService access;
     private final ScheduledTaskRepository taskRepository;
     private final AgentNoteRepository noteRepository;
     private final ConnectionService connectionService;
@@ -49,7 +49,7 @@ public class AgentService {
     private final WebTools webTools;
     private final ProviderHealthService health;
 
-    public AgentService(AiModelRegistry registry,
+    public AgentService(ProviderAccessService access,
                         ScheduledTaskRepository taskRepository,
                         AgentNoteRepository noteRepository,
                         ConnectionService connectionService,
@@ -60,7 +60,7 @@ public class AgentService {
                         WebhookService webhookService,
                         WebTools webTools,
                         ProviderHealthService health) {
-        this.registry = registry;
+        this.access = access;
         this.taskRepository = taskRepository;
         this.noteRepository = noteRepository;
         this.connectionService = connectionService;
@@ -73,53 +73,51 @@ public class AgentService {
         this.health = health;
     }
 
-    /** @param provider AI provider id ("anthropic", "openai", "gemini"); null/blank = server default */
+    /** @param provider AI provider id ("anthropic", "openai", "gemini", "groq"); null/blank = default */
     public String chat(AuthenticatedUser user, String conversationRef, String message, String provider) {
-        String providerId = registry.resolveId(provider);
+        var resolved = access.resolve(user.id(), provider);
         try {
-            String reply = prepare(user, conversationRef, message, provider).call().content();
-            health.recordSuccess(providerId);
+            String reply = prepare(resolved, user, conversationRef, message).call().content();
+            health.recordSuccess(resolved.healthScope());
             return reply;
         } catch (RuntimeException e) {
-            throw health.failure(providerId, registry.labelOf(providerId), e);
+            throw health.failure(resolved.healthScope(), resolved.label(), e);
         }
     }
 
     /** Streaming variant: emits the reply token by token. Every outcome is health-tracked. */
     public Flux<String> chatStream(AuthenticatedUser user, String conversationRef, String message, String provider) {
-        String providerId = registry.resolveId(provider);
+        var resolved = access.resolve(user.id(), provider);
         Flux<String> stream;
         try {
-            stream = prepare(user, conversationRef, message, provider).stream().content();
+            stream = prepare(resolved, user, conversationRef, message).stream().content();
         } catch (RuntimeException e) {
-            throw health.failure(providerId, registry.labelOf(providerId), e);
+            throw health.failure(resolved.healthScope(), resolved.label(), e);
         }
         return stream
-                .doOnComplete(() -> health.recordSuccess(providerId))
-                .onErrorMap(e -> health.failure(providerId, registry.labelOf(providerId), e));
+                .doOnComplete(() -> health.recordSuccess(resolved.healthScope()))
+                .onErrorMap(e -> health.failure(resolved.healthScope(), resolved.label(), e));
     }
 
     public String runScheduledTask(AuthenticatedUser user, ScheduledTask task) {
-        String providerId = registry.resolveId(task.getProvider());
-        ChatClient client = registry.forTask(task.getProvider());
+        var resolved = access.resolveLenient(user.id(), task.getProvider());
         String message = "Automated run of scheduled task #%d. Execute this instruction now: %s"
                 .formatted(task.getId(), task.getInstruction());
         try {
-            String result = request(client, providerId, user,
+            String result = request(resolved.client(), resolved.id(), user,
                     "u" + user.id() + ":task-" + task.getId(), message, true).call().content();
-            health.recordSuccess(providerId);
+            health.recordSuccess(resolved.healthScope());
             return result;
         } catch (RuntimeException e) {
             // the friendly classified message becomes the task's stored result
-            throw health.failure(providerId, registry.labelOf(providerId), e);
+            throw health.failure(resolved.healthScope(), resolved.label(), e);
         }
     }
 
-    private ChatClient.ChatClientRequestSpec prepare(AuthenticatedUser user, String conversationRef,
-                                                     String message, String provider) {
-        ChatClient client = registry.forChat(provider);
+    private ChatClient.ChatClientRequestSpec prepare(ProviderAccessService.ResolvedProvider resolved,
+                                                     AuthenticatedUser user, String conversationRef, String message) {
         String memoryKey = conversationService.resolveMemoryKey(user.id(), conversationRef, message);
-        return request(client, registry.resolveId(provider), user, memoryKey, message, false);
+        return request(resolved.client(), resolved.id(), user, memoryKey, message, false);
     }
 
     private ChatClient.ChatClientRequestSpec request(ChatClient client, String providerId, AuthenticatedUser user,

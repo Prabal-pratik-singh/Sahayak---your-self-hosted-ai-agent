@@ -1,35 +1,72 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App.jsx'
 import { api } from '../api.js'
-import { createRecognizer, speak, stopSpeaking } from '../hooks/useSpeech.js'
-import { XIcon } from './Icons.jsx'
+import { createRecognizer, speechSupported, stopSpeaking } from '../hooks/useSpeech.js'
+import { SpeakerIcon, XIcon } from './Icons.jsx'
 
-// Hands-free voice mode: it keeps listening, waits for the wake word (if set),
-// asks the agent, speaks the answer, then listens again — like a desk Jarvis.
-// Voice threads are ephemeral on purpose (they don't clutter the sidebar).
+// Hands-free voice mode: listen → recognize → ask the agent → speak the answer
+// → listen again. Two past bugs are guarded against here:
+//  1. A stale-closure restart used to re-open the mic WHILE the AI was
+//     thinking/speaking (breaking playback) — statusRef is the live source
+//     of truth, and the mic only restarts from the 'listening' state.
+//  2. The default wake word silently swallowed all speech; matching is now
+//     forgiving, and non-matching speech gets visible feedback.
+
+const ERROR_TEXT = {
+  'not-allowed': 'Microphone permission is blocked. Click the 🔒/camera icon in the address bar, allow the microphone, then reopen voice mode.',
+  'service-not-allowed': 'This browser blocked the speech service. Try Chrome or Edge.',
+  'audio-capture': 'No microphone was found. Plug one in or check your sound settings.',
+  network: 'Speech recognition needs internet and it seems unreachable right now.',
+}
 
 export default function VoiceOverlay({ onClose }) {
   const { settings, toast } = useApp()
   const [status, setStatus] = useState('listening') // listening | thinking | speaking | error
   const [transcript, setTranscript] = useState('')
+  const [hint, setHint] = useState('')
+  const [muted, setMuted] = useState(false)
   const [lastExchange, setLastExchange] = useState(null) // {question, answer}
-  const recognizerRef = useRef(null)
+
+  const statusRef = useRef('listening')
+  const mutedRef = useRef(false)
   const aliveRef = useRef(true)
+  const recognizerRef = useRef(null)
+  const hintTimerRef = useRef(null)
   const conversationRef = useRef('voice-' + Math.random().toString(36).slice(2, 10))
 
   const wakeWord = (settings.wakeWord || '').trim().toLowerCase()
 
+  const setPhase = (next) => {
+    statusRef.current = next
+    setStatus(next)
+  }
+
+  const flashHint = (text) => {
+    setHint(text)
+    clearTimeout(hintTimerRef.current)
+    hintTimerRef.current = setTimeout(() => setHint(''), 3000)
+  }
+
+  // Forgiving wake-word check: case-insensitive, tolerates the recognizer
+  // splitting or joining the word ("sahayak" vs "saha yak").
   const extractCommand = (text) => {
     if (!wakeWord) return text.trim()
+    const squash = (s) => s.toLowerCase().replace(/[^a-z]/g, '')
+    const squashedWake = squash(wakeWord)
     const lower = text.toLowerCase()
-    const at = lower.lastIndexOf(wakeWord)
-    if (at < 0) return null
-    return text.slice(at + wakeWord.length).replace(/^[\s,.!?-]+/, '').trim()
+    const directAt = lower.lastIndexOf(wakeWord)
+    if (directAt >= 0) {
+      return text.slice(directAt + wakeWord.length).replace(/^[\s,.!?-]+/, '').trim()
+    }
+    if (squash(text).includes(squashedWake)) {
+      return text.trim() // heard the wake word, mangled — take the whole sentence
+    }
+    return null
   }
 
   const listen = () => {
     if (!aliveRef.current) return
-    setStatus('listening')
+    setPhase('listening')
     setTranscript('')
     const recognizer = createRecognizer({
       continuous: true,
@@ -37,27 +74,33 @@ export default function VoiceOverlay({ onClose }) {
       onFinal: (segment) => {
         const command = extractCommand(segment)
         if (command) {
+          recognizerRef.current = null // this recognizer is done — no auto-restart
           recognizer.stop()
           ask(command)
+        } else if (segment.trim()) {
+          flashHint(`Heard you — start with "${settings.wakeWord}" to command me`)
         }
       },
       onEnd: () => {
-        // Browsers stop continuous recognition after a while — restart quietly.
-        if (aliveRef.current && status === 'listening') {
+        // Browsers cut continuous recognition off after a while. Restart ONLY
+        // if we are still in the listening phase (live check, not a stale one).
+        if (aliveRef.current && statusRef.current === 'listening' && recognizerRef.current === recognizer) {
           setTimeout(() => {
-            if (aliveRef.current && recognizerRef.current === recognizer) listen()
-          }, 400)
+            if (aliveRef.current && statusRef.current === 'listening') listen()
+          }, 350)
         }
       },
       onError: (code) => {
-        if (code === 'not-allowed' || code === 'service-not-allowed') {
-          setStatus('error')
-          setTranscript('Microphone permission is blocked. Allow it in the address bar, then reopen voice mode.')
+        if (code === 'no-speech' || code === 'aborted') return // harmless, onEnd restarts
+        const text = ERROR_TEXT[code]
+        if (text) {
+          setPhase('error')
+          setTranscript(text)
         }
       },
     })
     if (!recognizer) {
-      setStatus('error')
+      setPhase('error')
       setTranscript('This browser cannot listen. Use Chrome or Edge for voice mode.')
       return
     }
@@ -69,8 +112,33 @@ export default function VoiceOverlay({ onClose }) {
     }
   }
 
+  const speakAnswer = (answer) => {
+    if (!aliveRef.current) return
+    if (mutedRef.current || !window.speechSynthesis) {
+      listen() // muted: the answer is on screen, go straight back to listening
+      return
+    }
+    setPhase('speaking')
+    const synth = window.speechSynthesis
+    synth.cancel()
+    const clean = answer.replace(/https?:\/\/\S+/g, 'link').replace(/[*_#`~>|•]/g, ' ').slice(0, 900)
+    const utterance = new SpeechSynthesisUtterance(clean)
+    utterance.lang = navigator.language || 'en-IN'
+    utterance.rate = 1.05
+    utterance.onend = () => {
+      if (aliveRef.current && statusRef.current === 'speaking') listen()
+    }
+    utterance.onerror = () => {
+      if (aliveRef.current && statusRef.current === 'speaking') listen()
+    }
+    // Chrome quirk: speaking immediately after cancel() sometimes gets swallowed.
+    setTimeout(() => {
+      if (aliveRef.current && statusRef.current === 'speaking') synth.speak(utterance)
+    }, 60)
+  }
+
   const ask = async (question) => {
-    setStatus('thinking')
+    setPhase('thinking')
     setTranscript(question)
     try {
       const data = await api('/chat', {
@@ -81,26 +149,30 @@ export default function VoiceOverlay({ onClose }) {
           provider: settings.defaultProvider || undefined,
         },
       })
-      const answer = data.reply || '(no reply)'
+      const answer = data.reply?.trim() || 'I got an empty reply — please try again.'
       setLastExchange({ question, answer })
-      if (!aliveRef.current) return
-      setStatus('speaking')
-      speak(answer, {
-        onEnd: () => {
-          if (aliveRef.current) listen()
-        },
-      })
+      speakAnswer(answer)
     } catch (e) {
       setLastExchange({ question, answer: e.message })
-      if (!aliveRef.current) return
-      setStatus('speaking')
-      speak('Sorry, that failed. ' + e.message, {
-        onEnd: () => {
-          if (aliveRef.current) listen()
-        },
-      })
       toast(e.message, 'error')
+      speakAnswer('Sorry, that failed. ' + e.message)
     }
+  }
+
+  const stopSpeakingNow = () => {
+    stopSpeaking()
+    if (statusRef.current === 'speaking') listen()
+  }
+
+  const toggleMute = () => {
+    setMuted((m) => {
+      mutedRef.current = !m
+      if (!m) {
+        stopSpeaking()
+        if (statusRef.current === 'speaking') listen()
+      }
+      return !m
+    })
   }
 
   useEffect(() => {
@@ -108,6 +180,7 @@ export default function VoiceOverlay({ onClose }) {
     listen()
     return () => {
       aliveRef.current = false
+      clearTimeout(hintTimerRef.current)
       recognizerRef.current?.abort?.()
       stopSpeaking()
     }
@@ -117,15 +190,30 @@ export default function VoiceOverlay({ onClose }) {
   const STATUS_TEXT = {
     listening: wakeWord ? `Listening — say "${settings.wakeWord}, …"` : 'Listening — just speak',
     thinking: 'Thinking…',
-    speaking: 'Speaking…',
+    speaking: muted ? 'Muted — reply is on screen' : 'Speaking…',
     error: 'Voice unavailable',
   }
 
   return (
-    <div className="overlay voice">
-      <button className="icon-btn voice-close" title="Exit voice mode" onClick={onClose}>
-        <XIcon />
-      </button>
+    <div className="overlay voice" role="dialog" aria-label="Voice mode">
+      <div className="voice-controls">
+        {status === 'speaking' && !muted && (
+          <button className="btn ghost" onClick={stopSpeakingNow}>
+            ■ Stop speaking
+          </button>
+        )}
+        <button
+          className={`icon-btn ${muted ? '' : 'active'}`}
+          title={muted ? 'Unmute replies' : 'Mute replies'}
+          aria-label={muted ? 'Unmute replies' : 'Mute replies'}
+          onClick={toggleMute}
+        >
+          <SpeakerIcon on={!muted} />
+        </button>
+        <button className="icon-btn" title="Exit voice mode" aria-label="Exit voice mode" onClick={onClose}>
+          <XIcon />
+        </button>
+      </div>
 
       <div className={`voice-orb ${status}`}>
         <span />
@@ -133,7 +221,14 @@ export default function VoiceOverlay({ onClose }) {
         <span />
       </div>
 
-      <div className="voice-status">{STATUS_TEXT[status]}</div>
+      {status === 'speaking' && !muted && (
+        <div className="wave" aria-hidden="true">
+          <span /><span /><span /><span /><span />
+        </div>
+      )}
+
+      <div className={`voice-status ${status}`} role="status">{STATUS_TEXT[status]}</div>
+      {hint && <div className="voice-hint-flash">{hint}</div>}
       {transcript && <div className="voice-transcript">{transcript}</div>}
 
       {lastExchange && status !== 'thinking' && (
@@ -144,7 +239,9 @@ export default function VoiceOverlay({ onClose }) {
       )}
 
       <div className="voice-hint">
-        Wake word can be changed in Settings · voice threads stay out of your sidebar
+        {speechSupported
+          ? 'Wake word is optional — set or clear it in Settings · voice chats stay out of your sidebar'
+          : 'Listening needs Chrome or Edge'}
       </div>
     </div>
   )

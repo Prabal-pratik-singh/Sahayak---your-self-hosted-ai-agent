@@ -69,7 +69,10 @@ public class ProviderHealthService {
 
         log.warn("AI provider '{}' failure #{} [{}]: {}", providerId, streak, category,
                 reason != null ? reason : String.valueOf(error));
-        return new ProviderException(providerId, providerLabel, category, message, error);
+        // providerId may be a per-user health scope like "gemini:u4" — the
+        // exception (and API error body) should carry only the clean id.
+        String cleanId = providerId.contains(":") ? providerId.substring(0, providerId.indexOf(':')) : providerId;
+        return new ProviderException(cleanId, providerLabel, category, message, error);
     }
 
     public Map<String, HealthSnapshot> snapshot() {

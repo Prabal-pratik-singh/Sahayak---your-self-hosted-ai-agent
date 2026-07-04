@@ -7,10 +7,11 @@ spring:
       enabled: true
 
   autoconfigure:
-    # OpenAI's and Google's auto-configs refuse to start when their API key is
-    # blank, but every provider must stay optional here — so AiConfig builds
-    # those chat models manually, only when their key is actually set.
+    # Vendor auto-configs refuse to start when their API key is blank, but every
+    # provider must stay optional here (and BYOK builds per-user clients anyway) —
+    # so ChatClientFactory builds ALL chat models manually.
     exclude:
+      - org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
@@ -67,9 +68,14 @@ server:
   port: 8080
 
 app:
-  # Which configured AI provider answers by default: anthropic | openai | gemini.
+  # Which configured AI provider answers by default: anthropic | openai | gemini | groq.
   # Blank = the first configured one (in that order).
   default-ai: ${APP_DEFAULT_AI:}
+  groq:
+    # https://console.groq.com/keys — free tier with generous limits.
+    # Groq speaks the OpenAI protocol, so no extra SDK is needed.
+    api-key: ${GROQ_API_KEY:}
+    model: ${GROQ_MODEL:llama-3.3-70b-versatile}
   # Long random string. Protects login tokens and encrypts stored app passwords.
   # If empty, one is generated and saved to <home>/.sahayak/app-secret.txt
   secret: ${APP_SECRET:}

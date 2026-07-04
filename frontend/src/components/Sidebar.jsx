@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../App.jsx'
 import { api } from '../api.js'
+import RingGauge from './RingGauge.jsx'
 import {
   HomeIcon, ChatIcon, TasksIcon, CalendarIcon, ActivityIcon,
   PlugIcon, GridIcon, GearIcon, PlusIcon, PinIcon, TrashIcon, LogoutIcon,
@@ -21,7 +23,19 @@ export default function Sidebar() {
   const {
     user, logout, view, nav, conversations, refreshConversations,
     activeConversation, openConversation, newChat, sidebarOpen, toast,
+    online, providerHealth,
   } = useApp()
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sahayak_sidebar') === 'collapsed')
+
+  const toggleCollapse = () => {
+    setCollapsed((c) => {
+      localStorage.setItem('sahayak_sidebar', c ? 'open' : 'collapsed')
+      return !c
+    })
+  }
+
+  const healthy = providerHealth.filter((p) => p.status === 'ok').length
+  const systemPct = !online ? 0 : providerHealth.length === 0 ? 100 : Math.round((healthy / providerHealth.length) * 100)
 
   const togglePin = async (e, conversation) => {
     e.stopPropagation()
@@ -48,14 +62,23 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+    <aside className={`sidebar ${sidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <button
+        className="icon-btn side-collapse"
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={toggleCollapse}
+      >
+        {collapsed ? '›' : '‹'}
+      </button>
+
       <div className="side-brand">
         <span className="orb" aria-hidden="true" />
         <span className="wordmark">Sahayak</span>
       </div>
 
-      <button className="btn new-chat" onClick={newChat}>
-        <PlusIcon /> New chat
+      <button className="btn new-chat" title="New chat" onClick={newChat}>
+        <PlusIcon /> <span>New chat</span>
       </button>
 
       <nav className="side-nav">
@@ -93,6 +116,16 @@ export default function Sidebar() {
             </span>
           </div>
         ))}
+      </div>
+
+      <div className="side-status" title="Share of configured AI engines currently healthy">
+        <RingGauge value={systemPct} size={44} stroke={4} label={`${healthy}/${providerHealth.length || 1}`} />
+        <div className="side-status-text">
+          <b>AI ENGINES</b>
+          <span className={systemPct >= 50 ? '' : 'bad-text'}>
+            {!online ? 'Backend offline' : systemPct === 100 ? 'All systems operational' : 'Issues — see ⚡ in topbar'}
+          </span>
+        </div>
       </div>
 
       <div className="side-footer">

@@ -83,4 +83,15 @@ public class AiModelRegistry {
         Provider provider = providers.get(providerId);
         return provider != null ? provider.option().label() : providerId;
     }
+
+    /** Is this provider configured with a SERVER key? (Users may still bring their own.) */
+    public boolean has(String providerId) {
+        return providers.containsKey(providerId);
+    }
+
+    /** The server-key client for this provider, or null when not configured. */
+    public ChatClient clientOf(String providerId) {
+        Provider provider = providers.get(providerId);
+        return provider != null ? provider.client() : null;
+    }
 }

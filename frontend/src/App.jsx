@@ -35,7 +35,12 @@ const VIEWS = {
 function Loader() {
   return (
     <div className="loader">
-      <span className="orb" />
+      <div className="holo mini" aria-hidden="true">
+        <span className="holo-ring r2" />
+        <span className="holo-ring r1" />
+        <span className="holo-core" />
+      </div>
+      <span className="loader-text">INITIALIZING</span>
     </div>
   )
 }
@@ -49,6 +54,8 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [models, setModels] = useState(null)
   const [providerHealth, setProviderHealth] = useState([])
+  const [sysInfo, setSysInfo] = useState(null) // {database, uptimeSeconds} from /api/health
+  const [latencyMs, setLatencyMs] = useState(null) // measured round-trip to the backend
   const [online, setOnline] = useState(true)
   const [toasts, setToasts] = useState([])
   const healthSeenRef = useRef({})
@@ -110,7 +117,10 @@ export default function App() {
   // (e.g. a scheduled task hit Gemini's quota while you were elsewhere).
   const refreshHealth = useCallback(async () => {
     try {
-      const healthList = await api('/providers/health')
+      const t0 = performance.now()
+      const [healthList, sys] = await Promise.all([api('/providers/health'), api('/health')])
+      setLatencyMs(Math.round(performance.now() - t0))
+      setSysInfo(sys)
       setProviderHealth(healthList)
       for (const p of healthList) {
         const seenAt = healthSeenRef.current[p.id]
@@ -126,19 +136,23 @@ export default function App() {
     }
   }, [toast])
 
+  const refreshModels = useCallback(() => {
+    api('/models').then(setModels).catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (!user) return
     refreshConversations()
     refreshTasks()
     refreshHealth()
-    api('/models').then(setModels).catch(() => {})
+    refreshModels()
     const id = setInterval(refreshTasks, 10000)
     const healthId = setInterval(refreshHealth, 30000)
     return () => {
       clearInterval(id)
       clearInterval(healthId)
     }
-  }, [user, refreshConversations, refreshTasks, refreshHealth])
+  }, [user, refreshConversations, refreshTasks, refreshHealth, refreshModels])
 
   // LinkedIn OAuth lands back here with ?connected= / ?error=
   useEffect(() => {
@@ -213,8 +227,11 @@ export default function App() {
     tasks,
     refreshTasks,
     models,
+    refreshModels,
     providerHealth,
     refreshHealth,
+    sysInfo,
+    latencyMs,
     online,
     toast,
     prefill,

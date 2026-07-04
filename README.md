@@ -4,7 +4,7 @@ Talk to it — by **voice or text** — and it does the work: answers anything, 
 
 Multi-user by design: anyone you share your server with creates their **own account** and connects their **own** email and LinkedIn. No third-party middleman (no Composio) — the server talks to the real APIs directly.
 
-**Pick your AI brain:** works with **Claude (Anthropic)**, **ChatGPT (OpenAI)**, and **Gemini (Google)**. Configure any one — or several, and every user gets a dropdown in the chat to choose who answers.
+**Pick your AI brain:** works with **Claude (Anthropic)**, **ChatGPT (OpenAI)**, **Gemini (Google)**, and **Groq (free Llama models)**. The server owner can configure any subset — and **every user can also bring their own API key** (Settings → AI engine keys, verified on save, stored encrypted): free Gemini/Groq keys mean a public server costs the owner nothing. A server can even run with zero keys, BYOK-only.
 
 **Stack:** Spring Boot 3.5 · Spring AI 1.1 · Claude / ChatGPT / Gemini · PostgreSQL · React (Vite)
 
@@ -150,10 +150,14 @@ Each user then: Connections → **Connect LinkedIn** → LinkedIn login screen �
 
 | Variable | Required | Default | What it does |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | one of the three | — | Claude API key (https://console.anthropic.com) |
-| `OPENAI_API_KEY` | one of the three | — | ChatGPT API key (https://platform.openai.com) |
-| `GEMINI_API_KEY` | one of the three | — | Gemini API key (https://aistudio.google.com/apikey) |
-| `APP_DEFAULT_AI` | no | first configured | Which provider answers by default: `anthropic` / `openai` / `gemini` |
+| `ANTHROPIC_API_KEY` | optional* | — | Claude API key (https://console.anthropic.com) |
+| `OPENAI_API_KEY` | optional* | — | ChatGPT API key (https://platform.openai.com) |
+| `GEMINI_API_KEY` | optional* | — | Gemini API key (https://aistudio.google.com/apikey) |
+| `GROQ_API_KEY` | optional* | — | Groq API key — free tier (https://console.groq.com/keys) |
+| `GROQ_MODEL` | no | `llama-3.3-70b-versatile` | Which Groq model to use |
+| `APP_DEFAULT_AI` | no | first configured | Default provider: `anthropic` / `openai` / `gemini` / `groq` |
+
+\* Server keys are shared defaults. With none set, the server runs **BYOK-only**: each user adds their own key in **Settings → AI engine keys** (verified with a real test call, stored AES-encrypted, used only for their account).
 | `APP_SECRET` | recommended | auto-generated to `<home>/.sahayak/app-secret.txt` | Long random string; protects logins and encrypts stored credentials |
 | `ANTHROPIC_MODEL` | no | `claude-sonnet-5` | Which Claude model to use |
 | `OPENAI_MODEL` | no | `gpt-5-mini` | Which OpenAI model to use |

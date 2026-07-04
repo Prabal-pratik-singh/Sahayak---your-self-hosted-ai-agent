@@ -7,15 +7,29 @@ const KEY = 'sahayak_settings'
 
 const DEFAULTS = {
   theme: 'dark', // 'dark' | 'light' | 'system'
-  accent: 'amber', // 'amber' | 'cyan' | 'violet'
-  wakeWord: 'sahayak',
+  accent: 'cyan', // 'cyan' | 'amber' | 'violet'
+  wakeWord: '', // empty = respond to everything; set a word for Jarvis-style gating
   voiceReplies: false,
   defaultProvider: '', // '' = server default
 }
 
 function load() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }
+    const stored = JSON.parse(localStorage.getItem(KEY) || '{}')
+    // v0.5 rebrand: cyan became the signature accent. Migrate old saves once;
+    // anything the user picks afterwards sticks.
+    if (!stored._v5) {
+      stored.accent = 'cyan'
+      stored._v5 = true
+    }
+    // v0.5.1: the default wake word made voice mode ignore normal speech
+    // ("it only listens"). Voice now responds to everything by default;
+    // a wake word is an opt-in choice in Settings.
+    if (!stored._v6) {
+      if (stored.wakeWord === 'sahayak') stored.wakeWord = ''
+      stored._v6 = true
+    }
+    return { ...DEFAULTS, ...stored }
   } catch {
     return { ...DEFAULTS }
   }

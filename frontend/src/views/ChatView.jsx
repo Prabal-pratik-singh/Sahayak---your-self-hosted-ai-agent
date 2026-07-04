@@ -286,6 +286,7 @@ export default function ChatView() {
             {models.options.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
+                {o.source === 'your key' ? ' · yours' : ''}
               </option>
             ))}
           </select>

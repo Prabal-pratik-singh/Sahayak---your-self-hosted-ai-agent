@@ -4,7 +4,7 @@ import { speechSupported } from '../hooks/useSpeech.js'
 import { BellIcon, MenuIcon, MicIcon, MoonIcon, SearchIcon, SparkIcon, SunIcon } from './Icons.jsx'
 
 const TITLES = {
-  home: ['Home', 'Your agent at a glance'],
+  home: ['', 'How can I assist you today?'],
   chat: ['Chat', 'Talk to Sahayak'],
   tasks: ['Tasks', 'Everything scheduled and done'],
   calendar: ['Calendar', 'Scheduled work by day'],
@@ -12,6 +12,23 @@ const TITLES = {
   integrations: ['Integrations', 'Connect your apps'],
   tools: ['Tools', 'What Sahayak can do'],
   settings: ['Settings', 'Make it yours'],
+}
+
+/** Live HH:MM:SS — the heartbeat of the command center. */
+function Clock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <div className="clock" aria-hidden="true">
+      <span className="clock-time">{now.toLocaleTimeString(undefined, { hour12: false })}</span>
+      <span className="clock-date">
+        {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
+      </span>
+    </div>
+  )
 }
 
 const SEEN_KEY = 'sahayak_notif_seen'
@@ -24,7 +41,7 @@ const STATUS_LABELS = {
 }
 
 export default function Topbar() {
-  const { view, online, tasks, settings, providerHealth, refreshHealth, setPaletteOpen, setVoiceOpen, setSidebarOpen, nav } = useApp()
+  const { view, user, online, tasks, settings, providerHealth, refreshHealth, setPaletteOpen, setVoiceOpen, setSidebarOpen, nav } = useApp()
   const [bellOpen, setBellOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [seenAt, setSeenAt] = useState(() => localStorage.getItem(SEEN_KEY) || '')
@@ -68,8 +85,18 @@ export default function Topbar() {
         <MenuIcon />
       </button>
 
+      <Clock />
+
       <div className="top-title">
-        <h1>{title}</h1>
+        <h1>
+          {view === 'home' ? (
+            <>
+              Welcome back, <span className="grad-text">{user.name.split(' ')[0]}</span>
+            </>
+          ) : (
+            title
+          )}
+        </h1>
         <p>{subtitle}</p>
       </div>
 
@@ -103,7 +130,7 @@ export default function Topbar() {
                 <div key={p.id} className="ph-row">
                   <div className="ph-head">
                     <b>{p.label}</b>
-                    <span className="tag">{p.model}</span>
+                    <span className="tag">{p.source === 'your key' ? 'your key' : p.model}</span>
                     <span className={`chip ${p.status === 'ok' ? 'ok' : p.status === 'limited' ? 'warn' : 'bad'}`}>
                       {STATUS_LABELS[p.status] || p.status}
                     </span>
