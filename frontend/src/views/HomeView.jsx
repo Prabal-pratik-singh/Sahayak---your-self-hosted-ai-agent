@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useApp } from '../App.jsx'
 import { api } from '../api.js'
 import RingGauge from '../components/RingGauge.jsx'
 import { MicIcon, SendIcon } from '../components/Icons.jsx'
 import { speechSupported } from '../hooks/useSpeech.js'
 
+// three.js is heavy (~250KB gz) — load the WebGL hero as its own async chunk so
+// the dashboard shell paints instantly and the sphere streams in behind it.
+const HeroSphere = lazy(() => import('../components/HeroSphere.jsx'))
+
 // The command center: everything on this screen is real, live data —
 // no decorative fake numbers.
 
 const QUICK_ACTIONS = [
-  { icon: '🌐', title: 'Look it up', sub: 'Wikipedia & live weather', prefill: 'Look up on Wikipedia: ' },
+  { icon: '🌐', title: 'Search the web', sub: 'Wikipedia & live weather', prefill: 'Look up on Wikipedia: ' },
   { icon: '📅', title: 'Schedule a task', sub: 'Reminders & future actions', prefill: 'Tomorrow at 9 AM, ' },
   { icon: '🔗', title: 'Read a web page', sub: 'Summarize any public URL', prefill: 'Read this page and summarize it: https://' },
   { icon: '🎙️', title: 'Speak to me', sub: 'Hands-free voice mode', voice: true },
@@ -31,6 +35,21 @@ function formatTime(iso) {
     : d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+// "2m ago" style — for the activity feed.
+function relativeTime(iso) {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const secs = Math.round((Date.now() - then) / 1000)
+  if (secs < 60) return 'just now'
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.round(hrs / 24)
+  return days < 30 ? `${days}d ago` : formatTime(iso)
+}
+
 const PROVIDER_STATUS = {
   ok: ['Healthy', 'ok'],
   limited: ['Rate-limited', 'warn'],
@@ -41,7 +60,7 @@ const PROVIDER_STATUS = {
 export default function HomeView() {
   const {
     user, tasks, conversations, providerHealth, sysInfo, latencyMs, online,
-    nav, newChat, openConversation, setVoiceOpen, setPrefill, toast,
+    nav, newChat, openConversation, setVoiceOpen, setPrefill, toast, settings,
   } = useApp()
   const [connections, setConnections] = useState([])
   const [ask, setAsk] = useState('')
@@ -107,14 +126,9 @@ export default function HomeView() {
           </h2>
           <p className="hero-sub">I'm Sahayak, your AI assistant — ask, order, or just talk.</p>
 
-          <div className="holo" aria-hidden="true">
-            <span className="holo-ring r3" />
-            <span className="holo-ring r2" />
-            <span className="holo-ring r1" />
-            <span className="holo-core" />
-            <span className="holo-spark" />
-            <span className="holo-spark s2" />
-          </div>
+          <Suspense fallback={<div className="hero-sphere" />}>
+            <HeroSphere accent={settings.accent} />
+          </Suspense>
 
           <div className="quick-strip">
             {QUICK_ACTIONS.map((a) => (
@@ -157,7 +171,7 @@ export default function HomeView() {
             >
               <span aria-hidden="true">{a.icon}</span>
               <span className="row-text">{a.text}</span>
-              <span className="row-time">{formatTime(a.at)}</span>
+              <span className="row-time">{relativeTime(a.at)}</span>
             </div>
           ))}
         </section>
@@ -165,7 +179,7 @@ export default function HomeView() {
 
       <div className="command-rail">
         <section className="card">
-          <div className="card-title">System status</div>
+          <div className="card-title">AI Status</div>
           <div className="sys-head">
             <RingGauge
               value={systemPct}
@@ -177,7 +191,13 @@ export default function HomeView() {
               <b className={systemPct >= 50 ? 'ok-text' : 'bad-text'}>
                 {!online ? 'OFFLINE' : systemPct === 100 ? 'ONLINE' : 'DEGRADED'}
               </b>
-              <span>AI engines healthy</span>
+              <span>
+                {!online
+                  ? 'Backend unreachable'
+                  : systemPct === 100
+                    ? 'All engines operational'
+                    : 'Some engines need attention'}
+              </span>
             </div>
           </div>
           <div className="sys-row">
@@ -236,12 +256,19 @@ export default function HomeView() {
           {upcoming.length === 0 && (
             <p className="empty-line">Nothing scheduled — try “remind yourself to say hello in 2 minutes”.</p>
           )}
-          {upcoming.map((t) => (
-            <div key={t.id} className="event-row" onClick={() => nav('calendar')} style={{ cursor: 'pointer' }}>
-              <b>{t.instruction}</b>
-              <span>{formatTime(t.runAt)}</span>
+          {upcoming.length > 0 && (
+            <div className="mini-timeline">
+              {upcoming.map((t) => (
+                <div key={t.id} className="mini-tl-item" onClick={() => nav('calendar')}>
+                  <span className="mini-tl-dot" />
+                  <span className="mini-tl-body">
+                    <b>{t.instruction}</b>
+                    <span className="mini-tl-time">{formatTime(t.runAt)}</span>
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </section>
 
         <section className="card">

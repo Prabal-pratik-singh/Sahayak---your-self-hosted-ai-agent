@@ -7,13 +7,18 @@ const ACCENTS = [
   { id: 'cyan', label: 'Cyan' },
   { id: 'amber', label: 'Amber' },
   { id: 'violet', label: 'Violet' },
+  { id: 'darkblue', label: 'Dark Blue' },
 ]
 
 const KEY_LINKS = {
-  anthropic: 'console.anthropic.com',
-  openai: 'platform.openai.com/api-keys',
-  gemini: 'aistudio.google.com/apikey',
+  anthropic: 'console.anthropic.com (paid)',
+  openai: 'platform.openai.com/api-keys (paid)',
+  gemini: 'aistudio.google.com/apikey (free tier)',
   groq: 'console.groq.com/keys (free tier)',
+  github: 'github.com/settings/tokens (free with any GitHub account)',
+  cerebras: 'cloud.cerebras.ai (free tier)',
+  mistral: 'console.mistral.ai (free tier)',
+  openrouter: 'openrouter.ai/keys (free models)',
 }
 
 /** BYOK — paste your own API key per AI engine; it unlocks that brain for you. */
@@ -68,8 +73,10 @@ function AiKeysCard() {
     <section className="card">
       <div className="card-title">AI engine keys (bring your own)</div>
       <p className="hint">
-        Paste your own API key to use an engine on your own quota — free keys exist for Gemini and
-        Groq. Keys are encrypted on the server and used only for your account.
+        Paste your own API key to use an engine on your own quota — several have free tiers. Keys
+        are encrypted on the server and used only for your account. <b>“Actions”</b> means the
+        engine can actually DO things for you (reminders, weather, email, posting);
+        <b> “chat only”</b> means it can talk but not act.
       </p>
       {!keys && <p className="empty-line">Loading…</p>}
       {keys?.map((k) => (
@@ -77,6 +84,9 @@ function AiKeysCard() {
           <div className="key-head">
             <b>{k.label}</b>
             <span className="tag">{k.model}</span>
+            <span className={`chip ${k.toolCapable ? 'ok' : ''}`} title={k.toolCapable ? 'Can take real actions: reminders, weather, email, posting' : 'Can talk, but cannot take actions'}>
+              {k.toolCapable ? '⚡ actions + chat' : 'chat only'}
+            </span>
             <span className={`chip ${k.hasKey ? 'ok' : k.serverAvailable ? '' : 'bad'}`}>
               {k.hasKey ? 'your key' : k.serverAvailable ? 'server key' : 'no key'}
             </span>
@@ -150,10 +160,16 @@ export default function SettingsView() {
           </span>
           <input
             className="input"
+            type="text"
+            name="sahayak-wake-word"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
             value={settings.wakeWord}
-            maxLength={24}
-            onChange={(e) => settings.set({ wakeWord: e.target.value })}
-            placeholder="sahayak"
+            maxLength={20}
+            onChange={(e) => settings.set({ wakeWord: e.target.value.replace(/[^a-zA-Z ]/g, '') })}
+            placeholder="(none — I respond to everything)"
           />
         </div>
         <div className="setting-row">
@@ -183,6 +199,7 @@ export default function SettingsView() {
             {(models?.options || []).map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label} ({o.model}){o.source === 'your key' ? ' · your key' : ''}
+                {o.tools === false ? ' · chat only' : ''}
               </option>
             ))}
           </select>

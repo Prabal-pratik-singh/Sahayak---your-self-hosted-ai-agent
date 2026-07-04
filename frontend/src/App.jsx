@@ -11,6 +11,7 @@ import ChatView from './views/ChatView.jsx'
 // Heavier views load on demand so first paint stays fast.
 const TasksView = lazy(() => import('./views/TasksView.jsx'))
 const CalendarView = lazy(() => import('./views/CalendarView.jsx'))
+const NotesView = lazy(() => import('./views/NotesView.jsx'))
 const ActivityView = lazy(() => import('./views/ActivityView.jsx'))
 const IntegrationsView = lazy(() => import('./views/IntegrationsView.jsx'))
 const ToolsView = lazy(() => import('./views/ToolsView.jsx'))
@@ -26,6 +27,7 @@ const VIEWS = {
   chat: ChatView,
   tasks: TasksView,
   calendar: CalendarView,
+  notes: NotesView,
   activity: ActivityView,
   integrations: IntegrationsView,
   tools: ToolsView,

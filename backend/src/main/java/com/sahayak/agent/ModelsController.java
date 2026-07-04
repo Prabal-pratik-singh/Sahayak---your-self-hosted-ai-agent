@@ -16,7 +16,7 @@ import java.util.List;
 @RequestMapping("/api")
 public class ModelsController {
 
-    public record ModelOption(String id, String label, String model, String source) {
+    public record ModelOption(String id, String label, String model, String source, boolean tools) {
     }
 
     public record ModelsResponse(String defaultId, List<ModelOption> options) {
@@ -32,7 +32,8 @@ public class ModelsController {
     public ModelsResponse models(Authentication auth) {
         Long userId = AuthenticatedUser.from(auth).id();
         List<ModelOption> options = access.optionsFor(userId).stream()
-                .map(o -> new ModelOption(o.id(), o.label(), o.model(), o.ownKey() ? "your key" : "server"))
+                .map(o -> new ModelOption(o.id(), o.label(), o.model(),
+                        o.ownKey() ? "your key" : "server", o.toolCapable()))
                 .toList();
         return new ModelsResponse(access.defaultFor(userId), options);
     }

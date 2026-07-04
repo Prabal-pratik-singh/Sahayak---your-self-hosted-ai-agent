@@ -90,7 +90,8 @@ public class UserAiKeyService {
                 category = AiErrorClassifier.classify(e);
                 log.warn("Key verification for {} failed (attempt {}): [{}] {}: {}",
                         providerId, attempt, category, e.getClass().getSimpleName(), e.getMessage());
-                if (category == AiErrorCategory.INVALID_KEY || category == AiErrorCategory.QUOTA) {
+                if (category == AiErrorCategory.INVALID_KEY || category == AiErrorCategory.QUOTA
+                        || category == AiErrorCategory.MODEL_UNAVAILABLE) {
                     break; // definitive answers — retrying won't change them
                 }
             }
@@ -102,6 +103,7 @@ public class UserAiKeyService {
         if (category != null) {
             warning = switch (category) {
                 case QUOTA -> "Key saved. " + label + " says it is rate-limited right now — it will work once the quota resets.";
+                case MODEL_UNAVAILABLE -> "Key saved, but " + label + "'s configured model is unavailable — the server owner needs to update the model name.";
                 default -> "Key saved, but it could not be verified right now (" + label + " was unreachable). It will be used on your next message.";
             };
         }

@@ -5,9 +5,10 @@ import { BellIcon, MenuIcon, MicIcon, MoonIcon, SearchIcon, SparkIcon, SunIcon }
 
 const TITLES = {
   home: ['', 'How can I assist you today?'],
-  chat: ['Chat', 'Talk to Sahayak'],
+  chat: ['AI Chat', 'Talk to Sahayak'],
   tasks: ['Tasks', 'Everything scheduled and done'],
   calendar: ['Calendar', 'Scheduled work by day'],
+  notes: ['Notes', 'What Sahayak remembers about you'],
   activity: ['Activity', 'What happened recently'],
   integrations: ['Integrations', 'Connect your apps'],
   tools: ['Tools', 'What Sahayak can do'],

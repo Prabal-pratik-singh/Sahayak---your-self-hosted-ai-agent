@@ -32,9 +32,14 @@
   --shadow-sm: 0 6px 24px rgba(0, 4, 16, 0.45);
   --glow: 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
 
-  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
-  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  /* One clean sans-serif across the whole UI. --font-mono is aliased to it so
+     existing "mono" chrome (clock, chips, labels) becomes Inter automatically;
+     real code keeps a true monospace via --font-code. */
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Inter', system-ui, sans-serif;
+  --font-code: 'IBM Plex Mono', ui-monospace, monospace;
+  --tracking-label: 0.04em;
 
   --aurora-opacity: 0.14;
   --stars-opacity: 0.5;
@@ -83,6 +88,18 @@
   --accent-ink: #ffffff;
 }
 
+/* electric azure, matching target-ui.png */
+[data-accent='darkblue'] {
+  --accent: #0ea5e9;
+  --accent-2: #38bdf8;
+  --accent-ink: #041826;
+}
+
+[data-theme='light'][data-accent='darkblue'] {
+  --accent: #0284c7;
+  --accent-ink: #ffffff;
+}
+
 /* ---------- base ---------- */
 
 * {
@@ -97,13 +114,20 @@ body,
 
 body {
   margin: 0;
+  /* lit-from-within: lighter navy toward the upper-centre, deepening to near-black at the edges */
   background: var(--bg0);
+  background: radial-gradient(125% 95% at 50% 28%, #12203f 0%, #0b1327 46%, var(--bg0) 100%);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.55;
   overflow: hidden;
   transition: background 0.3s ease, color 0.3s ease;
+}
+
+[data-theme='light'] body {
+  background: var(--bg0);
+  background: radial-gradient(125% 95% at 50% 28%, #ffffff 0%, #eaf0fb 55%, var(--bg0) 100%);
 }
 
 body::before,
@@ -245,9 +269,22 @@ button {
   border-radius: var(--radius);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: var(--shadow-sm);
+  /* frosted glass floating over the glow: soft blue outer halo + inner top highlight */
+  box-shadow: var(--shadow-sm),
+    0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
   padding: 16px 18px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-sm),
+    0 0 22px color-mix(in srgb, var(--accent) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent);
+}
+
+[data-theme='light'] .card:hover {
+  box-shadow: var(--shadow-sm);
 }
 
 /* sci-fi HUD corner brackets */
@@ -536,6 +573,70 @@ kbd {
   padding: 34px 18px;
 }
 
+/* ---- Notes page ---- */
+
+.notes-view {
+  max-width: 940px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.note-add {
+  display: flex;
+  gap: 9px;
+}
+
+.note-add .input {
+  flex: 1;
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.note-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 108px;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.note-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--stroke-strong);
+  box-shadow: var(--shadow);
+}
+
+.note-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.note-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.note-time {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.empty-card svg {
+  width: 26px;
+  height: 26px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
 /* the agent's presence — a breathing amber/cyan orb */
 .orb {
   flex: none;
@@ -608,7 +709,8 @@ kbd {
 /* ---------- app shell ---------- */
 
 .app {
-  height: 100%;
+  height: 100vh; /* fallback */
+  height: 100dvh; /* tracks mobile browser chrome so the pinned footer stays on-screen */
   display: flex;
 }
 
@@ -630,7 +732,22 @@ kbd {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 6px 6px;
+  padding: 2px 6px 10px;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+
+.brand-sub {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  color: var(--faint);
+  margin-top: 3px;
 }
 
 .new-chat {
@@ -688,13 +805,36 @@ kbd {
   padding: 8px 8px 2px;
 }
 
-.conv-list {
-  flex: 1;
+/* nav + conversations share one internal scroller so the pinned bottom
+   group (status, profile, About/Services/Contact) can never be clipped,
+   however short the window is. */
+.side-scroll {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  gap: 10px;
+}
+
+.side-nav {
+  flex: 0 0 auto;
+}
+
+.conv-list {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
+}
+
+/* top and bottom groups stay put; only .side-scroll gives way */
+.side-brand,
+.new-chat,
+.side-status,
+.side-footer,
+.side-mini-links {
+  flex-shrink: 0;
 }
 
 .conv-item {
@@ -784,11 +924,48 @@ kbd {
   gap: 9px;
 }
 
+.side-user-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
 .side-user-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13.5px;
+  font-weight: 600;
+}
+
+.side-user-role {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* online dot on the avatar */
+.avatar {
+  position: relative;
+}
+
+.avatar-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg1);
+}
+
+.avatar-dot.on {
+  background: var(--ok);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 80%, transparent);
+}
+
+.avatar-dot.off {
+  background: var(--faint);
 }
 
 .scrim {
@@ -1435,7 +1612,7 @@ kbd {
 }
 
 .md code {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: 0.88em;
   background: color-mix(in srgb, var(--accent-2) 12%, transparent);
   border-radius: 5px;
@@ -1468,7 +1645,7 @@ kbd {
   border: 1px solid var(--stroke);
   border-radius: var(--radius-sm);
   overflow-x: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: 12.8px;
   line-height: 1.5;
 }
@@ -2112,6 +2289,10 @@ kbd {
   background: linear-gradient(135deg, #8b7cf6, #3ec7e8);
 }
 
+.swatch.darkblue {
+  background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+}
+
 .swatch.active,
 .swatch:hover {
   transform: scale(1.12);
@@ -2387,6 +2568,11 @@ kbd {
 
 .voice-answer p {
   margin: 6px 0 0;
+}
+
+.voice-answer.error {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg2));
 }
 
 .voice-hint {
@@ -3013,6 +3199,27 @@ kbd {
   100% { transform: translate(-50%, -50%) translateX(-104px); opacity: 1; }
 }
 
+/* ---- hero network sphere (WebGL, three.js) ---- */
+
+.hero-sphere {
+  width: 100%;
+  height: 300px;
+  margin: 4px auto 2px;
+  position: relative;
+}
+
+.hero-sphere canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+@media (max-width: 720px) {
+  .hero-sphere {
+    height: 220px;
+  }
+}
+
 .holo.mini {
   width: 140px;
   height: 110px;
@@ -3313,6 +3520,56 @@ kbd {
   color: var(--faint);
 }
 
+/* connected dot+line timeline for "Upcoming" */
+.mini-timeline {
+  position: relative;
+  margin-left: 5px;
+  padding-left: 16px;
+  border-left: 1.5px solid var(--stroke-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mini-tl-item {
+  position: relative;
+  cursor: pointer;
+}
+
+.mini-tl-dot {
+  position: absolute;
+  left: -21px;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg1);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.mini-tl-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mini-tl-body b {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-tl-item:hover .mini-tl-body b {
+  color: var(--accent);
+}
+
+.mini-tl-time {
+  font-size: 11px;
+  color: var(--faint);
+}
+
 /* ---- hero panel: breathing ambient glow + entry stagger ---- */
 
 .hero-panel {
@@ -3489,13 +3746,13 @@ kbd {
   width: 78px;
 }
 
-.sidebar.collapsed .wordmark,
+.sidebar.collapsed .brand-text,
 .sidebar.collapsed .nav-item span,
 .sidebar.collapsed .nav-item.active::after,
 .sidebar.collapsed .new-chat span,
 .sidebar.collapsed .side-section-title,
 .sidebar.collapsed .conv-list,
-.sidebar.collapsed .side-user-name,
+.sidebar.collapsed .side-user-text,
 .sidebar.collapsed .side-mini-links,
 .sidebar.collapsed .side-status {
   display: none;
@@ -3545,10 +3802,6 @@ kbd {
   color: var(--danger);
 }
 
-.conv-list {
-  flex: 1;
-}
-
 /* glow polish on primary controls */
 .btn {
   box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent),
@@ -3570,15 +3823,20 @@ kbd {
     width: min(300px, 84vw);
   }
 
-  .sidebar.collapsed .wordmark,
+  .sidebar.collapsed .brand-text,
   .sidebar.collapsed .nav-item span,
   .sidebar.collapsed .new-chat span,
   .sidebar.collapsed .side-section-title,
   .sidebar.collapsed .conv-list,
-  .sidebar.collapsed .side-user-name,
+  .sidebar.collapsed .side-user-text,
   .sidebar.collapsed .side-mini-links,
   .sidebar.collapsed .side-status {
     display: revert;
+  }
+
+  .brand-text,
+  .side-user-text {
+    display: flex;
   }
 }
 
@@ -3622,6 +3880,10 @@ kbd {
   .holo-core::before,
   .holo-core::after,
   .holo-spark,
+  .holo-globe,
+  .globe-mer,
+  .globe-links line,
+  .globe-nodes circle,
   .hero-panel,
   .command-main > *,
   .command-rail > *,

@@ -29,6 +29,15 @@ class AiErrorClassifierTest {
     }
 
     @Test
+    void classifiesRetiredModelAsModelUnavailable() {
+        assertEquals(AiErrorCategory.MODEL_UNAVAILABLE,
+                AiErrorClassifier.classify(new RuntimeException(
+                        "404 - {\"error\":{\"message\":\"The model `llama-3.1-70b` has been decommissioned\"}}")));
+        assertEquals(AiErrorCategory.MODEL_UNAVAILABLE,
+                AiErrorClassifier.classify(new RuntimeException("model_not_found: no such model")));
+    }
+
+    @Test
     void classifiesProviderDowntime() {
         assertEquals(AiErrorCategory.PROVIDER_DOWN,
                 AiErrorClassifier.classify(new RuntimeException("503 Service Unavailable")));
@@ -47,8 +56,8 @@ class AiErrorClassifierTest {
     @Test
     void friendlyMessagesNameTheProvider() {
         String msg = AiErrorClassifier.friendly(AiErrorCategory.QUOTA, "Gemini");
-        assertTrue(msg.startsWith("Gemini"), msg);
-        assertTrue(msg.toLowerCase().contains("quota") || msg.toLowerCase().contains("rate limit"), msg);
+        assertTrue(msg.contains("Gemini"), msg);
+        assertTrue(msg.toLowerCase().contains("limit") || msg.toLowerCase().contains("quota"), msg);
     }
 
     @Test

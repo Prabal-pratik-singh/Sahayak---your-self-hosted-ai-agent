@@ -29,6 +29,14 @@ function load() {
       if (stored.wakeWord === 'sahayak') stored.wakeWord = ''
       stored._v6 = true
     }
+    // v0.6.2: browsers autofilled the wake-word field with the user's email,
+    // which gated voice mode on an impossible phrase. Clear any wake word
+    // that is clearly not a spoken word (contains @, spaces, or is very long).
+    if (!stored._v7) {
+      const w = stored.wakeWord || ''
+      if (w.includes('@') || w.includes(' ') || w.length > 20) stored.wakeWord = ''
+      stored._v7 = true
+    }
     return { ...DEFAULTS, ...stored }
   } catch {
     return { ...DEFAULTS }

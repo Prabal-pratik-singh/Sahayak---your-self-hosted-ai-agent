@@ -18,7 +18,7 @@ class ProviderHealthServiceTest {
 
         assertEquals(AiErrorCategory.QUOTA, e.category());
         assertEquals("gemini", e.providerId());
-        assertTrue(e.friendlyMessage().startsWith("Gemini"), e.friendlyMessage());
+        assertTrue(e.friendlyMessage().contains("Gemini"), e.friendlyMessage());
 
         var snap = health.snapshot().get("gemini");
         assertEquals(1, snap.totalRequests());

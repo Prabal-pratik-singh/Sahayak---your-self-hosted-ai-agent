@@ -100,11 +100,11 @@ public class AgentService {
     }
 
     public String runScheduledTask(AuthenticatedUser user, ScheduledTask task) {
-        var resolved = access.resolveLenient(user.id(), task.getProvider());
+        var resolved = access.resolveForTask(user.id(), task.getProvider());
         String message = "Automated run of scheduled task #%d. Execute this instruction now: %s"
                 .formatted(task.getId(), task.getInstruction());
         try {
-            String result = request(resolved.client(), resolved.id(), user,
+            String result = request(resolved, user,
                     "u" + user.id() + ":task-" + task.getId(), message, true).call().content();
             health.recordSuccess(resolved.healthScope());
             return result;
@@ -117,15 +117,29 @@ public class AgentService {
     private ChatClient.ChatClientRequestSpec prepare(ProviderAccessService.ResolvedProvider resolved,
                                                      AuthenticatedUser user, String conversationRef, String message) {
         String memoryKey = conversationService.resolveMemoryKey(user.id(), conversationRef, message);
-        return request(resolved.client(), resolved.id(), user, memoryKey, message, false);
+        return request(resolved, user, memoryKey, message, false);
     }
 
-    private ChatClient.ChatClientRequestSpec request(ChatClient client, String providerId, AuthenticatedUser user,
+    private ChatClient.ChatClientRequestSpec request(ProviderAccessService.ResolvedProvider resolved,
+                                                     AuthenticatedUser user,
                                                      String memoryKey, String userMessage, boolean automatedRun) {
+        var spec = resolved.client().prompt()
+                .system(Prompts.system(user, connectionService.promptSummary(user.id()),
+                        notesSummary(user.id()), automatedRun, resolved.toolCapable()))
+                .user(userMessage)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, memoryKey));
+
+        // Chat-only engines (e.g. OpenRouter's free models) reject tool
+        // definitions outright — so they get none, and the prompt tells the
+        // model to be upfront about it.
+        if (!resolved.toolCapable()) {
+            return spec;
+        }
+
         List<Object> tools = new ArrayList<>();
         // The scheduler remembers which brain the user was talking to, so the
         // task later runs on that same provider.
-        tools.add(new SchedulerTools(taskRepository, user.id(), providerId));
+        tools.add(new SchedulerTools(taskRepository, user.id(), resolved.id()));
         tools.add(new MemoryTools(noteRepository, user.id()));
         tools.add(webTools);
         tools.add(new MessagingTools(telegramService, webhookService,
@@ -136,13 +150,7 @@ public class AgentService {
                 .ifPresent(settings -> tools.add(new EmailTools(emailService, settings)));
         connectionService.linkedInAccount(user.id())
                 .ifPresent(account -> tools.add(new LinkedInTools(linkedInService, account)));
-
-        return client.prompt()
-                .system(Prompts.system(user, connectionService.promptSummary(user.id()),
-                        notesSummary(user.id()), automatedRun))
-                .user(userMessage)
-                .tools(tools.toArray())
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, memoryKey));
+        return spec.tools(tools.toArray());
     }
 
     private String notesSummary(Long userId) {

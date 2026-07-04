@@ -40,6 +40,13 @@ public final class AiErrorClassifier {
                     || m.contains("authentication")) {
                 return AiErrorCategory.INVALID_KEY;
             }
+            // A wrong/retired model name — providers (esp. Groq) rename models
+            // often. Check before the generic 5xx bucket.
+            if (m.contains("404") || m.contains("model_not_found") || m.contains("model not found")
+                    || m.contains("decommission") || m.contains("does not exist")
+                    || m.contains("no such model") || m.contains("model_decommissioned")) {
+                return AiErrorCategory.MODEL_UNAVAILABLE;
+            }
             if (m.contains("503") || m.contains("502") || m.contains("500")
                     || m.contains("overloaded") || m.contains("unavailable")
                     || m.contains("internal server error") || m.contains("bad gateway")) {
@@ -55,10 +62,13 @@ public final class AiErrorClassifier {
     /** One clear sentence for the user, naming the provider. */
     public static String friendly(AiErrorCategory category, String providerLabel) {
         return switch (category) {
-            case QUOTA -> providerLabel + " hit its rate limit or quota — free tiers allow only a handful "
-                    + "of requests. Wait a minute, or switch to another AI in the dropdown.";
+            case QUOTA -> "You've hit " + providerLabel + "'s usage limit — free tiers cap how many "
+                    + "requests you get per minute and per day. Wait a bit and try again, add your own key "
+                    + "in Settings, or switch to another AI in the dropdown.";
             case INVALID_KEY -> providerLabel + " rejected the API key — it looks invalid, expired, or "
                     + "missing permissions. The server owner should check that key.";
+            case MODEL_UNAVAILABLE -> providerLabel + " no longer offers the configured model (providers "
+                    + "rename or retire them). The server owner should update the model name for " + providerLabel + ".";
             case PROVIDER_DOWN -> providerLabel + " seems to be having problems right now. "
                     + "Try again shortly, or switch to another AI.";
             case NETWORK -> "Could not reach " + providerLabel + " — the server may have lost its "

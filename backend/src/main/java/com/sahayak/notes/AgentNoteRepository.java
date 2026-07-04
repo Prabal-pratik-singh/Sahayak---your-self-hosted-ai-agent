@@ -9,6 +9,8 @@ public interface AgentNoteRepository extends JpaRepository<AgentNote, Long> {
 
     List<AgentNote> findByUserIdOrderByCreatedAtAsc(Long userId);
 
+    List<AgentNote> findByUserIdOrderByCreatedAtDesc(Long userId);
+
     List<AgentNote> findTop15ByUserIdOrderByCreatedAtDesc(Long userId);
 
     Optional<AgentNote> findByIdAndUserId(Long id, Long userId);

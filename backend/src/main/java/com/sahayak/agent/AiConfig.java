@@ -43,12 +43,20 @@ public class AiConfig {
                                     @Value("${spring.ai.openai.api-key:}") String openaiKey,
                                     @Value("${spring.ai.google.genai.api-key:}") String geminiKey,
                                     @Value("${app.groq.api-key:}") String groqKey,
+                                    @Value("${app.github.api-key:}") String githubKey,
+                                    @Value("${app.cerebras.api-key:}") String cerebrasKey,
+                                    @Value("${app.mistral.api-key:}") String mistralKey,
+                                    @Value("${app.openrouter.api-key:}") String openrouterKey,
                                     @Value("${app.default-ai:}") String preferredDefault) {
         Map<String, String> serverKeys = new LinkedHashMap<>();
         serverKeys.put("anthropic", anthropicKey);
         serverKeys.put("openai", openaiKey);
         serverKeys.put("gemini", geminiKey);
         serverKeys.put("groq", groqKey);
+        serverKeys.put("github", githubKey);
+        serverKeys.put("cerebras", cerebrasKey);
+        serverKeys.put("mistral", mistralKey);
+        serverKeys.put("openrouter", openrouterKey);
 
         var providers = new LinkedHashMap<String, AiModelRegistry.Provider>();
         serverKeys.forEach((id, key) -> {

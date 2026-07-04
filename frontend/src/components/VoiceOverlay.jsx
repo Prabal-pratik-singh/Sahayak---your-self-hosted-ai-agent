@@ -153,9 +153,14 @@ export default function VoiceOverlay({ onClose }) {
       setLastExchange({ question, answer })
       speakAnswer(answer)
     } catch (e) {
-      setLastExchange({ question, answer: e.message })
+      // Show the full reason on screen; speak a short, clear version so the
+      // user isn't left with silence when e.g. the daily AI limit is hit.
+      const limitHit = /limit|quota|rate/i.test(e.message)
+      setLastExchange({ question, answer: e.message, error: true })
       toast(e.message, 'error')
-      speakAnswer('Sorry, that failed. ' + e.message)
+      speakAnswer(limitHit
+        ? "You've run out of your AI usage limit for now. Add your own key in settings, or try again later."
+        : 'Sorry, that request failed. ' + e.message)
     }
   }
 
@@ -232,8 +237,9 @@ export default function VoiceOverlay({ onClose }) {
       {transcript && <div className="voice-transcript">{transcript}</div>}
 
       {lastExchange && status !== 'thinking' && (
-        <div className="voice-answer card">
+        <div className={`voice-answer card ${lastExchange.error ? 'error' : ''}`}>
           <small>{lastExchange.question}</small>
+          {lastExchange.error && <span className="msg-error-label">Could not answer</span>}
           <p>{lastExchange.answer}</p>
         </div>
       )}

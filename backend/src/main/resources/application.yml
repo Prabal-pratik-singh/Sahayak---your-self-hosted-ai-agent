@@ -76,6 +76,24 @@ app:
     # Groq speaks the OpenAI protocol, so no extra SDK is needed.
     api-key: ${GROQ_API_KEY:}
     model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+  github:
+    # https://github.com/settings/tokens — any GitHub account gets free
+    # (rate-limited) model access; the key is a GitHub token.
+    api-key: ${GITHUB_MODELS_KEY:}
+    model: ${GITHUB_MODELS_MODEL:openai/gpt-4o-mini}
+  cerebras:
+    # https://cloud.cerebras.ai — free tier, very fast Llama models.
+    api-key: ${CEREBRAS_API_KEY:}
+    model: ${CEREBRAS_MODEL:llama-3.3-70b}
+  mistral:
+    # https://console.mistral.ai — free "experiment" tier.
+    api-key: ${MISTRAL_API_KEY:}
+    model: ${MISTRAL_MODEL:mistral-small-latest}
+  openrouter:
+    # https://openrouter.ai/keys — many models, some free. The free models
+    # can't use tools, so this engine is offered as CHAT-ONLY.
+    api-key: ${OPENROUTER_API_KEY:}
+    model: ${OPENROUTER_MODEL:meta-llama/llama-3.3-70b-instruct:free}
   # Long random string. Protects login tokens and encrypts stored app passwords.
   # If empty, one is generated and saved to <home>/.sahayak/app-secret.txt
   secret: ${APP_SECRET:}

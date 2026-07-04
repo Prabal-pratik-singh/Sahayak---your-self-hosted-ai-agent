@@ -4,7 +4,20 @@ Talk to it — by **voice or text** — and it does the work: answers anything, 
 
 Multi-user by design: anyone you share your server with creates their **own account** and connects their **own** email and LinkedIn. No third-party middleman (no Composio) — the server talks to the real APIs directly.
 
-**Pick your AI brain:** works with **Claude (Anthropic)**, **ChatGPT (OpenAI)**, **Gemini (Google)**, and **Groq (free Llama models)**. The server owner can configure any subset — and **every user can also bring their own API key** (Settings → AI engine keys, verified on save, stored encrypted): free Gemini/Groq keys mean a public server costs the owner nothing. A server can even run with zero keys, BYOK-only.
+**Pick your AI brain — 8 engines, most with free tiers.** The server owner can configure any subset, and **every user can also bring their own API key** (Settings → AI engine keys: verified on save, stored encrypted). Free keys for Gemini, Groq, GitHub Models, Cerebras, Mistral and OpenRouter mean a public server can cost the owner nothing — a server can even run with zero keys, BYOK-only.
+
+| Engine | Free tier? | Can take actions? | Env var (server key) |
+| --- | --- | --- | --- |
+| Groq | ✅ generous | ⚡ yes | `GROQ_API_KEY` |
+| Gemini (Google) | ✅ small | ⚡ yes | `GEMINI_API_KEY` |
+| GitHub Models | ✅ any GitHub account | ⚡ yes | `GITHUB_MODELS_KEY` |
+| Cerebras | ✅ | ⚡ yes | `CEREBRAS_API_KEY` |
+| Mistral | ✅ | ⚡ yes | `MISTRAL_API_KEY` |
+| OpenRouter | ✅ free models | 💬 chat only | `OPENROUTER_API_KEY` |
+| Claude (Anthropic) | paid | ⚡ yes | `ANTHROPIC_API_KEY` |
+| ChatGPT (OpenAI) | paid | ⚡ yes | `OPENAI_API_KEY` |
+
+**"Actions" vs "chat only", in plain words:** an *actions* engine can really DO things — set reminders, check live weather, send your email, post for you. A *chat-only* engine can talk but not act (its free models can't use tools) — Sahayak labels this clearly in the dropdown and the AI itself will tell you to switch engines instead of pretending.
 
 **Stack:** Spring Boot 3.5 · Spring AI 1.1 · Claude / ChatGPT / Gemini · PostgreSQL · React (Vite)
 

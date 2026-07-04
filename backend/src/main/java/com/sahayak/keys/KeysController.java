@@ -25,7 +25,8 @@ import java.util.Set;
 @Validated
 public class KeysController {
 
-    public record KeyInfo(String provider, String label, String model, boolean hasKey, boolean serverAvailable) {
+    public record KeyInfo(String provider, String label, String model, boolean hasKey,
+                          boolean serverAvailable, boolean toolCapable) {
     }
 
     public record SaveKeyRequest(@NotBlank @Size(max = 300) String apiKey) {
@@ -47,7 +48,7 @@ public class KeysController {
         Set<String> mine = keys.providersOf(userId);
         return ChatClientFactory.KNOWN_IDS.stream()
                 .map(id -> new KeyInfo(id, factory.labelOf(id), factory.modelOf(id),
-                        mine.contains(id), registry.has(id)))
+                        mine.contains(id), registry.has(id), factory.toolCapable(id)))
                 .toList();
     }
 

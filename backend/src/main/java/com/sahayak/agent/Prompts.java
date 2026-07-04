@@ -16,9 +16,25 @@ public final class Prompts {
     }
 
     public static String system(AuthenticatedUser user, String connectionsSummary,
-                                String notesSummary, boolean automatedRun) {
+                                String notesSummary, boolean automatedRun, boolean toolCapable) {
         String now = LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy, HH:mm"));
+
+        if (!toolCapable) {
+            return """
+                    You are Sahayak, %s's personal AI assistant. Current date-time: %s (server local).
+
+                    IMPORTANT: you are running on a CHAT-ONLY engine right now. You have NO tools — \
+                    no live weather, no web lookups, no scheduling, no email, no posting, no saved notes. \
+                    Answer from your own knowledge, and when the user asks for a live lookup or a real \
+                    action, say plainly: "I'm on a chat-only engine right now — switch to an engine \
+                    marked 'actions' in the dropdown (like Groq or Gemini) and I can do that." \
+                    Never pretend an action happened. Keep replies concise and natural.
+
+                    Saved notes about %s (read-only context):
+                    %s
+                    """.formatted(user.name(), now, user.name(), notesSummary);
+        }
 
         String mode = automatedRun
                 ? """

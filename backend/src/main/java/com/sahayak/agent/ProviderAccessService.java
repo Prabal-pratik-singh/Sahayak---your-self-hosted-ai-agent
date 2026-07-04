@@ -21,11 +21,12 @@ import java.util.Set;
 public class ProviderAccessService {
 
     /** One engine available to this user. */
-    public record AccessOption(String id, String label, String model, boolean ownKey) {
+    public record AccessOption(String id, String label, String model, boolean ownKey, boolean toolCapable) {
     }
 
     /** A fully resolved choice, ready to run a chat turn. */
-    public record ResolvedProvider(String id, String label, ChatClient client, String healthScope) {
+    public record ResolvedProvider(String id, String label, ChatClient client, String healthScope,
+                                   boolean toolCapable) {
     }
 
     private final AiModelRegistry registry;
@@ -44,7 +45,8 @@ public class ProviderAccessService {
         for (String id : ChatClientFactory.KNOWN_IDS) {
             boolean own = mine.contains(id);
             if (own || registry.has(id)) {
-                options.add(new AccessOption(id, factory.labelOf(id), factory.modelOf(id), own));
+                options.add(new AccessOption(id, factory.labelOf(id), factory.modelOf(id), own,
+                        factory.toolCapable(id)));
             }
         }
         return options;
@@ -72,23 +74,36 @@ public class ProviderAccessService {
         }
         Optional<ChatClient> own = userKeys.clientFor(userId, id);
         if (own.isPresent()) {
-            return new ResolvedProvider(id, factory.labelOf(id), own.get(), id + ":u" + userId);
+            return new ResolvedProvider(id, factory.labelOf(id), own.get(), id + ":u" + userId,
+                    factory.toolCapable(id));
         }
         ChatClient server = registry.clientOf(id);
         if (server != null) {
-            return new ResolvedProvider(id, factory.labelOf(id), server, id);
+            return new ResolvedProvider(id, factory.labelOf(id), server, id, factory.toolCapable(id));
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 factory.labelOf(id) + " is not available to you — this server has no key for it. "
                         + "Add your own key in Settings, or pick another engine.");
     }
 
-    /** For scheduled tasks: the stored engine may be gone — fall back to the default instead of failing. */
-    public ResolvedProvider resolveLenient(Long userId, String stored) {
+    /**
+     * For scheduled tasks: tasks exist to DO things, so a chat-only engine is
+     * useless for them — prefer the stored engine, then any tool-capable one,
+     * then whatever exists (the model will at least explain the limitation).
+     */
+    public ResolvedProvider resolveForTask(Long userId, String stored) {
         try {
-            return resolve(userId, stored);
+            ResolvedProvider resolved = resolve(userId, stored);
+            if (resolved.toolCapable()) {
+                return resolved;
+            }
         } catch (ResponseStatusException e) {
-            return resolve(userId, null);
+            /* stored engine gone — fall through */
         }
+        return optionsFor(userId).stream()
+                .filter(AccessOption::toolCapable)
+                .findFirst()
+                .map(o -> resolve(userId, o.id()))
+                .orElseGet(() -> resolve(userId, null));
     }
 }

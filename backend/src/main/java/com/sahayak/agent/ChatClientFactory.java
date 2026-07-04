@@ -18,54 +18,84 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Builds a ready ChatClient for any supported provider from an API key —
- * the ONE place that knows how to talk to each vendor. Used for the server's
- * own keys (at startup) and for every user-provided key (BYOK, on demand).
+ * The ONE place that knows every supported AI engine: how to build a client
+ * for it, and — crucially for honesty — whether it can use TOOLS ("actions":
+ * scheduling, email, weather, …) or can only chat. Chat-only engines never
+ * even receive tool definitions, because several free endpoints reject them.
  *
- * Groq needs no SDK of its own: it speaks the OpenAI protocol, so it is the
- * OpenAI client pointed at Groq's servers.
+ * Most engines speak the OpenAI protocol, so they reuse the OpenAI client
+ * pointed at a different address.
  */
 @Component
 public class ChatClientFactory {
 
-    public static final List<String> KNOWN_IDS = List.of("anthropic", "openai", "gemini", "groq");
+    /** Everything the app needs to know about one engine. */
+    public record ProviderSpec(String id, String label, boolean toolCapable) {
+    }
 
-    private static final Map<String, String> LABELS = Map.of(
-            "anthropic", "Claude",
-            "openai", "ChatGPT",
-            "gemini", "Gemini",
-            "groq", "Groq");
+    private static final Map<String, ProviderSpec> SPECS = new LinkedHashMap<>() {{
+        put("anthropic", new ProviderSpec("anthropic", "Claude", true));
+        put("openai", new ProviderSpec("openai", "ChatGPT", true));
+        put("gemini", new ProviderSpec("gemini", "Gemini", true));
+        put("groq", new ProviderSpec("groq", "Groq", true));
+        put("github", new ProviderSpec("github", "GitHub Models", true));
+        put("cerebras", new ProviderSpec("cerebras", "Cerebras", true));
+        put("mistral", new ProviderSpec("mistral", "Mistral", true));
+        // OpenRouter's FREE models mostly reject tool definitions, so it is
+        // offered honestly as chat-only (its default model here is a free one).
+        put("openrouter", new ProviderSpec("openrouter", "OpenRouter", false));
+    }};
 
-    private static final String GROQ_BASE_URL = "https://api.groq.com/openai";
+    public static final List<String> KNOWN_IDS = List.copyOf(SPECS.keySet());
 
     private final MessageChatMemoryAdvisor memoryAdvisor;
     private final String anthropicModel;
     private final String openaiModel;
     private final String geminiModel;
     private final String groqModel;
+    private final String githubModel;
+    private final String cerebrasModel;
+    private final String mistralModel;
+    private final String openrouterModel;
 
     public ChatClientFactory(ChatMemory chatMemory,
                              @Value("${spring.ai.anthropic.chat.options.model:claude-sonnet-5}") String anthropicModel,
                              @Value("${spring.ai.openai.chat.options.model:gpt-5-mini}") String openaiModel,
                              @Value("${spring.ai.google.genai.chat.options.model:gemini-2.5-flash}") String geminiModel,
-                             @Value("${app.groq.model:llama-3.3-70b-versatile}") String groqModel) {
+                             @Value("${app.groq.model:llama-3.3-70b-versatile}") String groqModel,
+                             @Value("${app.github.model:openai/gpt-4o-mini}") String githubModel,
+                             @Value("${app.cerebras.model:llama-3.3-70b}") String cerebrasModel,
+                             @Value("${app.mistral.model:mistral-small-latest}") String mistralModel,
+                             @Value("${app.openrouter.model:meta-llama/llama-3.3-70b-instruct:free}") String openrouterModel) {
         this.memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory).build();
         this.anthropicModel = anthropicModel;
         this.openaiModel = openaiModel;
         this.geminiModel = geminiModel;
         this.groqModel = groqModel;
+        this.githubModel = githubModel;
+        this.cerebrasModel = cerebrasModel;
+        this.mistralModel = mistralModel;
+        this.openrouterModel = openrouterModel;
     }
 
     public boolean known(String providerId) {
-        return providerId != null && LABELS.containsKey(providerId);
+        return providerId != null && SPECS.containsKey(providerId);
     }
 
     public String labelOf(String providerId) {
-        return LABELS.getOrDefault(providerId, providerId);
+        ProviderSpec spec = SPECS.get(providerId);
+        return spec != null ? spec.label() : providerId;
+    }
+
+    /** Can this engine take actions (tools), or only talk? */
+    public boolean toolCapable(String providerId) {
+        ProviderSpec spec = SPECS.get(providerId);
+        return spec != null && spec.toolCapable();
     }
 
     public String modelOf(String providerId) {
@@ -74,6 +104,10 @@ public class ChatClientFactory {
             case "openai" -> openaiModel;
             case "gemini" -> geminiModel;
             case "groq" -> groqModel;
+            case "github" -> githubModel;
+            case "cerebras" -> cerebrasModel;
+            case "mistral" -> mistralModel;
+            case "openrouter" -> openrouterModel;
             default -> "?";
         };
     }
@@ -95,21 +129,29 @@ public class ChatClientFactory {
                     .defaultOptions(AnthropicChatOptions.builder()
                             .model(anthropicModel).maxTokens(4096).build())
                     .build();
-            case "openai" -> openAiStyle(apiKey, null, openaiModel);
-            case "groq" -> openAiStyle(apiKey, GROQ_BASE_URL, groqModel);
             case "gemini" -> GoogleGenAiChatModel.builder()
                     .genAiClient(Client.builder().apiKey(apiKey).build())
                     .defaultOptions(GoogleGenAiChatOptions.builder().model(geminiModel).build())
                     .build();
+            case "openai" -> openAiStyle(apiKey, null, null, openaiModel);
+            case "groq" -> openAiStyle(apiKey, "https://api.groq.com/openai", null, groqModel);
+            // GitHub Models skips the usual /v1 prefix, hence the custom path.
+            case "github" -> openAiStyle(apiKey, "https://models.github.ai/inference", "/chat/completions", githubModel);
+            case "cerebras" -> openAiStyle(apiKey, "https://api.cerebras.ai", null, cerebrasModel);
+            case "mistral" -> openAiStyle(apiKey, "https://api.mistral.ai", null, mistralModel);
+            case "openrouter" -> openAiStyle(apiKey, "https://openrouter.ai/api", null, openrouterModel);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Unknown AI provider '" + providerId + "'.");
         };
     }
 
-    private OpenAiChatModel openAiStyle(String apiKey, String baseUrl, String modelName) {
+    private OpenAiChatModel openAiStyle(String apiKey, String baseUrl, String completionsPath, String modelName) {
         OpenAiApi.Builder api = OpenAiApi.builder().apiKey(apiKey);
         if (baseUrl != null) {
             api.baseUrl(baseUrl);
+        }
+        if (completionsPath != null) {
+            api.completionsPath(completionsPath);
         }
         return OpenAiChatModel.builder()
                 .openAiApi(api.build())

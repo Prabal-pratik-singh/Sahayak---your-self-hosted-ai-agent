@@ -287,6 +287,7 @@ export default function ChatView() {
               <option key={o.id} value={o.id}>
                 {o.label}
                 {o.source === 'your key' ? ' · yours' : ''}
+                {o.tools === false ? ' · chat only' : ''}
               </option>
             ))}
           </select>

@@ -102,3 +102,6 @@ export const RestartIcon = () => (
 export const SparkIcon = () => (
   <svg {...base}><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z" /></svg>
 )
+export const NotesIcon = () => (
+  <svg {...base}><path d="M5 3h11l3 3v15H5z" /><path d="M9 8h6M9 12h6M9 16h4" /></svg>
+)
