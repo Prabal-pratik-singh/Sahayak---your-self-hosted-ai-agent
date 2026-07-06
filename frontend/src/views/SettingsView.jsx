@@ -21,12 +21,98 @@ const KEY_LINKS = {
   openrouter: 'openrouter.ai/keys (free models)',
 }
 
+// "How do I get a key?" guidance, keyed by the app's provider ids
+// (anthropic = Claude, openai = ChatGPT). URLs/notes/steps are verbatim —
+// the provider's own page is the source of truth.
+const KEY_GUIDES = {
+  anthropic: {
+    tier: 'Paid',
+    link: 'https://platform.claude.com/settings/keys',
+    note: 'Pay-as-you-go, no permanent free tier. A Claude.ai Pro/Max subscription does NOT include API access.',
+    steps: [
+      'Sign up at console.anthropic.com (it redirects to platform.claude.com) with email or Google.',
+      'Open Settings → Billing and add a payment method / buy credits — keys fail without this.',
+      'Go to API Keys → Create Key, give it a name, and copy it immediately (shown only once).',
+      'Paste it above and Save. The key starts with sk-ant-.',
+    ],
+  },
+  openai: {
+    tier: 'Paid',
+    link: 'https://platform.openai.com/api-keys',
+    note: 'The API is separate from chatgpt.com — a ChatGPT Plus subscription does NOT include API access. Free tier is negligible; you need ~$5 credit.',
+    steps: [
+      'Sign up at platform.openai.com (not chatgpt.com) and verify your email + phone.',
+      'Under Billing, add a payment method and at least $5 of credit.',
+      'Go to API keys → Create new secret key, and copy it once.',
+      'Paste it above and Save. The key starts with sk-proj-.',
+    ],
+  },
+  gemini: {
+    tier: 'Free tier',
+    link: 'https://aistudio.google.com/apikey',
+    note: 'Free tier covers the Flash models, no credit card. In the EEA, UK, or Switzerland you must enable billing even for the free tier.',
+    steps: [
+      'Go to aistudio.google.com and sign in with a Google account.',
+      'Click Get API key → Create API key, and let it create a project.',
+      'Copy the key (starts with AIza) — you can view it again later here.',
+      'Paste it above and Save.',
+    ],
+  },
+  groq: {
+    tier: 'Free',
+    link: 'https://console.groq.com/keys',
+    note: 'Free, no credit card. Runs open-weight models only (no GPT/Claude/Gemini).',
+    steps: [
+      'Sign up at console.groq.com with email, Google, or GitHub.',
+      'Go to API Keys → Create API Key and give it a name.',
+      'Copy it immediately (shown only once). The key starts with gsk_.',
+      'Paste it above and Save.',
+    ],
+  },
+  github: {
+    tier: 'Free',
+    link: 'https://github.com/settings/tokens',
+    note: 'GitHub Models uses a GitHub personal access token (PAT) as the credential — there is no separate API key. Free but rate-limited.',
+    steps: [
+      'Go to github.com/settings/tokens (Settings → Developer settings → Personal access tokens).',
+      'Generate a new token with the models:read permission.',
+      'Copy the token.',
+      'Paste it above and Save — your GitHub token is the key here.',
+    ],
+  },
+  cerebras: {
+    tier: 'Free tier',
+    link: 'https://cloud.cerebras.ai',
+    note: 'Free tier (~1M tokens/day), no credit card. Open models only.',
+    steps: [
+      'Sign up at cloud.cerebras.ai with email (no card required).',
+      'Open API Keys in the left nav → Create / Generate key.',
+      'Copy it (starts with csk-).',
+      'Paste it above and Save.',
+    ],
+  },
+  mistral: {
+    tier: 'Free tier',
+    link: 'https://console.mistral.ai/api-keys',
+    note: "Free 'Experiment' tier, no credit card but phone verification required. On the free tier your data may be used for training unless you opt out in Settings → Privacy.",
+    steps: [
+      'Sign up at console.mistral.ai and verify your phone number.',
+      'Go to API Keys → Create new key, name it, and set an expiry.',
+      'Copy it immediately (shown only once).',
+      'Paste it above and Save.',
+    ],
+  },
+}
+
 /** BYOK — paste your own API key per AI engine; it unlocks that brain for you. */
 function AiKeysCard() {
   const { toast, refreshModels, refreshHealth } = useApp()
   const [keys, setKeys] = useState(null)
   const [inputs, setInputs] = useState({})
   const [busyProvider, setBusyProvider] = useState('')
+  const [openGuide, setOpenGuide] = useState({}) // provider → expanded?
+
+  const toggleGuide = (provider) => setOpenGuide((s) => ({ ...s, [provider]: !s[provider] }))
 
   const load = () => api('/keys').then(setKeys).catch((e) => toast(e.message, 'error'))
   useEffect(() => {
@@ -113,9 +199,49 @@ function AiKeysCard() {
               </button>
             )}
           </div>
+
+          {KEY_GUIDES[k.provider] && (
+            <div className="key-guide-wrap">
+              <button
+                className="key-guide-toggle"
+                aria-expanded={!!openGuide[k.provider]}
+                onClick={() => toggleGuide(k.provider)}
+              >
+                <span className={`guide-chevron ${openGuide[k.provider] ? 'open' : ''}`} aria-hidden="true">›</span>
+                How do I get a {k.label} key?
+              </button>
+              {openGuide[k.provider] && (
+                <GuidePanel label={k.label} guide={KEY_GUIDES[k.provider]} />
+              )}
+            </div>
+          )}
         </div>
       ))}
     </section>
+  )
+}
+
+/** Inline "how to get a key" steps for one provider — purely informational. */
+function GuidePanel({ label, guide }) {
+  const free = /free/i.test(guide.tier)
+  return (
+    <div className="key-guide">
+      <div className="key-guide-top">
+        <span className={`chip ${free ? 'ok' : 'warn'}`}>{guide.tier}</span>
+        <p className="key-guide-note">{guide.note}</p>
+      </div>
+      <ol className="key-guide-steps">
+        {guide.steps.map((step, i) => (
+          <li key={i}>{step}</li>
+        ))}
+      </ol>
+      <div className="key-guide-actions">
+        <a className="btn ghost" href={guide.link} target="_blank" rel="noopener noreferrer">
+          Open {label} key page ↗
+        </a>
+      </div>
+      <p className="key-guide-fineprint">Steps can change — the provider's page is the source of truth.</p>
+    </div>
   )
 }
 
@@ -154,24 +280,10 @@ export default function SettingsView() {
       <section className="card">
         <div className="card-title">Voice</div>
         {!speechSupported && <p className="hint">Listening needs Chrome or Edge — voice replies work everywhere.</p>}
-        <div className="setting-row">
-          <span>
-            Wake word <small className="hint-inline">(used in Voice mode; leave empty to react to everything)</small>
-          </span>
-          <input
-            className="input"
-            type="text"
-            name="sahayak-wake-word"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-            value={settings.wakeWord}
-            maxLength={20}
-            onChange={(e) => settings.set({ wakeWord: e.target.value.replace(/[^a-zA-Z ]/g, '') })}
-            placeholder="(none — I respond to everything)"
-          />
-        </div>
+        <p className="hint">
+          Voice mode works like a call — tap the mic, just talk, and it replies, then listens
+          again. No wake word needed.
+        </p>
         <div className="setting-row">
           <span>Speak replies in normal chat</span>
           <button

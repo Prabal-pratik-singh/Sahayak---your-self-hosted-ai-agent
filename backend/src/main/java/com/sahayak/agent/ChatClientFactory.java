@@ -34,21 +34,30 @@ import java.util.Map;
 @Component
 public class ChatClientFactory {
 
-    /** Everything the app needs to know about one engine. */
-    public record ProviderSpec(String id, String label, boolean toolCapable) {
+    /**
+     * Everything the app needs to know about one engine.
+     *
+     * @param toolCapable   can it take actions (scheduling, email, …)?
+     * @param visionCapable can it SEE images? Text-only models (Groq/Cerebras
+     *                      llama-3.3) must never receive image input.
+     */
+    public record ProviderSpec(String id, String label, boolean toolCapable, boolean visionCapable) {
     }
 
     private static final Map<String, ProviderSpec> SPECS = new LinkedHashMap<>() {{
-        put("anthropic", new ProviderSpec("anthropic", "Claude", true));
-        put("openai", new ProviderSpec("openai", "ChatGPT", true));
-        put("gemini", new ProviderSpec("gemini", "Gemini", true));
-        put("groq", new ProviderSpec("groq", "Groq", true));
-        put("github", new ProviderSpec("github", "GitHub Models", true));
-        put("cerebras", new ProviderSpec("cerebras", "Cerebras", true));
-        put("mistral", new ProviderSpec("mistral", "Mistral", true));
+        put("anthropic", new ProviderSpec("anthropic", "Claude", true, true));
+        put("openai", new ProviderSpec("openai", "ChatGPT", true, true));
+        put("gemini", new ProviderSpec("gemini", "Gemini", true, true));
+        put("groq", new ProviderSpec("groq", "Groq", true, false));
+        // GitHub Models' default model here (gpt-4o-mini) is multimodal.
+        put("github", new ProviderSpec("github", "GitHub Models", true, true));
+        put("cerebras", new ProviderSpec("cerebras", "Cerebras", true, false));
+        // Conservative: mistral-small + OpenRouter's free models are treated
+        // as text-only rather than risking a hard provider error mid-chat.
+        put("mistral", new ProviderSpec("mistral", "Mistral", true, false));
         // OpenRouter's FREE models mostly reject tool definitions, so it is
         // offered honestly as chat-only (its default model here is a free one).
-        put("openrouter", new ProviderSpec("openrouter", "OpenRouter", false));
+        put("openrouter", new ProviderSpec("openrouter", "OpenRouter", false, false));
     }};
 
     public static final List<String> KNOWN_IDS = List.copyOf(SPECS.keySet());
@@ -96,6 +105,12 @@ public class ChatClientFactory {
     public boolean toolCapable(String providerId) {
         ProviderSpec spec = SPECS.get(providerId);
         return spec != null && spec.toolCapable();
+    }
+
+    /** Can this engine see images? Guard EVERY image send with this. */
+    public boolean visionCapable(String providerId) {
+        ProviderSpec spec = SPECS.get(providerId);
+        return spec != null && spec.visionCapable();
     }
 
     public String modelOf(String providerId) {

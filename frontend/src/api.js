@@ -59,6 +59,42 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
 }
 
 /**
+ * Uploads one file as multipart/form-data and returns its stored reference
+ * ({ id, filename, mime, kind, size }). We must NOT set Content-Type here —
+ * the browser adds the multipart boundary itself.
+ */
+export async function uploadFile(file, conversationId) {
+  const form = new FormData()
+  form.append('file', file)
+  if (conversationId) form.append('conversationId', String(conversationId))
+
+  const headers = {}
+  const token = tokenStore.get()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  let res
+  try {
+    res = await fetch('/api/attachments', {
+      method: 'POST',
+      headers,
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    })
+  } catch (err) {
+    throw friendlyNetworkError(err)
+  }
+  handleUnauthorized(res)
+  let data = null
+  try {
+    data = await res.json()
+  } catch {
+    /* no body */
+  }
+  if (!res.ok) throw new Error(data?.error || `Upload failed (${res.status})`)
+  return data
+}
+
+/**
  * Streaming chat over Server-Sent Events. The backend emits "token" events
  * (JSON-encoded string chunks), then one "done" event; failures arrive as a
  * single "error" event. Resolves when the stream ends; throws early if the

@@ -1,5 +1,6 @@
 package com.sahayak.integrations.messaging;
 
+import com.sahayak.activity.ActivityService;
 import com.sahayak.integrations.ConnectionService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -19,17 +20,23 @@ public class MessagingTools {
     private final Optional<ConnectionService.TelegramConfig> telegram;
     private final Optional<String> discordWebhook;
     private final Optional<String> slackWebhook;
+    private final ActivityService activity;
+    private final Long userId;
 
     public MessagingTools(TelegramService telegramService,
                           WebhookService webhookService,
                           Optional<ConnectionService.TelegramConfig> telegram,
                           Optional<String> discordWebhook,
-                          Optional<String> slackWebhook) {
+                          Optional<String> slackWebhook,
+                          ActivityService activity,
+                          Long userId) {
         this.telegramService = telegramService;
         this.webhookService = webhookService;
         this.telegram = telegram;
         this.discordWebhook = discordWebhook;
         this.slackWebhook = slackWebhook;
+        this.activity = activity;
+        this.userId = userId;
     }
 
     @Tool(description = """
@@ -42,7 +49,11 @@ public class MessagingTools {
             return "ERROR: Telegram is not connected. The user can connect it on the Integrations page.";
         }
         String problem = telegramService.send(telegram.get().botToken(), telegram.get().chatId(), text);
-        return problem == null ? "Message sent on Telegram." : "ERROR: Telegram said: " + problem;
+        if (problem == null) {
+            activity.record(userId, "telegram", "Sent a Telegram message");
+            return "Message sent on Telegram.";
+        }
+        return "ERROR: Telegram said: " + problem;
     }
 
     @Tool(description = """
@@ -55,7 +66,11 @@ public class MessagingTools {
             return "ERROR: Discord is not connected. The user can connect it on the Integrations page.";
         }
         String problem = webhookService.sendDiscord(discordWebhook.get(), text);
-        return problem == null ? "Message posted on Discord." : "ERROR: Discord said: " + problem;
+        if (problem == null) {
+            activity.record(userId, "discord", "Posted to Discord");
+            return "Message posted on Discord.";
+        }
+        return "ERROR: Discord said: " + problem;
     }
 
     @Tool(description = """
@@ -68,6 +83,10 @@ public class MessagingTools {
             return "ERROR: Slack is not connected. The user can connect it on the Integrations page.";
         }
         String problem = webhookService.sendSlack(slackWebhook.get(), text);
-        return problem == null ? "Message posted on Slack." : "ERROR: Slack said: " + problem;
+        if (problem == null) {
+            activity.record(userId, "slack", "Posted to Slack");
+            return "Message posted on Slack.";
+        }
+        return "ERROR: Slack said: " + problem;
     }
 }

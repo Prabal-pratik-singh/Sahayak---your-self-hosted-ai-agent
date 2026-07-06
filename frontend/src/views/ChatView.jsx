@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../App.jsx'
-import { api, streamChat } from '../api.js'
+import { api, streamChat, uploadFile } from '../api.js'
 import Markdown from '../components/Markdown.jsx'
 import { createRecognizer, speak, speechSupported, stopSpeaking } from '../hooks/useSpeech.js'
-import { CopyIcon, MicIcon, SendIcon, SpeakerIcon } from '../components/Icons.jsx'
+import { CopyIcon, FileIcon, MicIcon, PaperclipIcon, SendIcon, SpeakerIcon, XIcon } from '../components/Icons.jsx'
+import { ACCEPT, formatSize, releaseStaged, stageFiles } from '../attachments.js'
 
 const SUGGESTIONS = [
   "What's the weather in Delhi right now?",
@@ -11,6 +12,30 @@ const SUGGESTIONS = [
   'Draft a LinkedIn post about my new project',
   'Remind yourself to say hello in 2 minutes',
 ]
+
+// Attachment thumbnails/chips shown inside a sent message bubble.
+function MessageAttachments({ attachments }) {
+  if (!attachments?.length) return null
+  return (
+    <div className="msg-attachments">
+      {attachments.map((a, i) =>
+        a.kind === 'image' && a.previewUrl ? (
+          <a key={i} className="msg-attach image" href={a.previewUrl} target="_blank" rel="noreferrer" title={a.name}>
+            <img src={a.previewUrl} alt={a.name} />
+          </a>
+        ) : (
+          <span key={i} className="msg-attach">
+            <span className="attach-ico" aria-hidden="true"><FileIcon /></span>
+            <span className="attach-meta">
+              <span className="attach-name">{a.name}</span>
+              <span className="attach-sub">{a.ext?.toUpperCase()}</span>
+            </span>
+          </span>
+        ),
+      )}
+    </div>
+  )
+}
 
 function Bubble({ message, user, onRetry }) {
   const copy = async () => {
@@ -23,7 +48,10 @@ function Bubble({ message, user, onRetry }) {
   if (message.role === 'user') {
     return (
       <div className="msg user">
-        <div className="msg-bubble">{message.content}</div>
+        <div className="msg-bubble">
+          <MessageAttachments attachments={message.attachments} />
+          {message.content}
+        </div>
         <span className="avatar small">{(user.name || '?')[0].toUpperCase()}</span>
       </div>
     )
@@ -53,20 +81,27 @@ function Bubble({ message, user, onRetry }) {
 export default function ChatView() {
   const {
     user, models, settings, activeConversation, openConversation,
-    refreshConversations, refreshTasks, newChat, prefill, setPrefill, toast,
+    refreshConversations, refreshTasks, newChat, prefill, setPrefill,
+    prefillFiles, setPrefillFiles, toast,
   } = useApp()
 
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const [provider, setProvider] = useState(settings.defaultProvider || '')
   const [listening, setListening] = useState(false)
+  const [attachments, setAttachments] = useState([])
+  const [dragging, setDragging] = useState(false)
 
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
   const recognizerRef = useRef(null)
   const stickToBottom = useRef(true)
+  const fileInputRef = useRef(null)
+  // Always holds the latest staged attachments, so unmount cleanup can revoke
+  // their object URLs without a stale closure.
+  const stagedRef = useRef([])
+  stagedRef.current = attachments
   // Set when send() creates the conversation itself: the history effect must
   // NOT clear the optimistic messages then, or the first reply vanishes
   // (this race was the "AI sometimes doesn't reply" bug).
@@ -87,14 +122,21 @@ export default function ChatView() {
       .finally(() => setLoadingHistory(false))
   }, [activeConversation?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Prefill from Tools / Home quick actions.
+  // Prefill from Tools / Home quick actions — text and/or files picked on the
+  // dashboard land here already staged, ready to send.
   useEffect(() => {
     if (prefill) {
       setInput(prefill)
       setPrefill('')
       inputRef.current?.focus()
     }
-  }, [prefill, setPrefill])
+    if (prefillFiles?.length) {
+      const accepted = stageFiles(prefillFiles, stagedRef.current, (msg) => toast(msg, 'error'))
+      if (accepted.length) setAttachments((c) => [...c, ...accepted])
+      setPrefillFiles([])
+      inputRef.current?.focus()
+    }
+  }, [prefill, setPrefill, prefillFiles, setPrefillFiles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Autoscroll only while the user is near the bottom.
   const onScroll = () => {
@@ -125,9 +167,31 @@ export default function ChatView() {
       return next
     })
 
+  // Validate + stage picked/dropped files. This is a UX guard only — the
+  // server re-validates type + size on upload (never trust the client).
+  const addFiles = (fileList) => {
+    const accepted = stageFiles(fileList, attachments, (msg) => toast(msg, 'error'))
+    if (accepted.length) setAttachments((c) => [...c, ...accepted])
+  }
+
+  const removeAttachment = (id) => {
+    setAttachments((c) => {
+      const found = c.find((a) => a.id === id)
+      if (found?.previewUrl) URL.revokeObjectURL(found.previewUrl)
+      return c.filter((a) => a.id !== id)
+    })
+  }
+
+  const onDrop = (e) => {
+    e.preventDefault()
+    setDragging(false)
+    if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files)
+  }
+
   const send = async (textOverride, { skipEcho = false } = {}) => {
     const text = (textOverride ?? input).trim()
-    if (!text || busy) return
+    // Attachment-only sends are fine (e.g. just an image: "what's this?" implied).
+    if ((!text && !attachments.length) || busy) return
 
     let conversation = activeConversation
     if (!conversation?.id) {
@@ -136,19 +200,47 @@ export default function ChatView() {
       justCreatedRef.current = conversation.id
     }
 
+    const staged = attachments
+    setBusy(true)
+
+    // Upload attachments FIRST, so a failed upload aborts before we commit the
+    // message — we never show a bubble referencing a file that didn't store.
+    let refs = []
+    if (staged.length) {
+      try {
+        refs = await Promise.all(staged.map((a) => uploadFile(a.file, conversation.id)))
+      } catch (e) {
+        setBusy(false)
+        toast(e.message || 'Could not upload the attachment.', 'error')
+        return // keep the text + staged files so the user can retry
+      }
+    }
+
     setInput('')
+    setAttachments([])
+    // Pair each stored ref with its local preview for the sent bubble. The
+    // object URLs now live on the message, so they aren't revoked here.
+    const outgoing = staged.map((a, i) => ({
+      id: refs[i]?.id,
+      name: a.name,
+      kind: a.kind,
+      ext: a.ext,
+      previewUrl: a.previewUrl,
+    }))
     stickToBottom.current = true
     setMessages((m) => [
       ...m,
-      ...(skipEcho ? [] : [{ role: 'user', content: text }]),
+      ...(skipEcho ? [] : [{ role: 'user', content: text, attachments: outgoing }]),
       { role: 'assistant', content: '', streaming: true },
     ])
-    setBusy(true)
 
+    const attachmentIds = refs.map((r) => r?.id).filter((id) => id != null)
     const body = {
       message: text,
       conversationId: String(conversation.id),
-      provider: provider || settings.defaultProvider || undefined,
+      provider: settings.defaultProvider || undefined,
+      // Consumed by the backend in the vision/analysis phase; ignored for now.
+      ...(attachmentIds.length ? { attachmentIds } : {}),
     }
 
     let spoken = ''
@@ -230,6 +322,8 @@ export default function ChatView() {
     () => () => {
       recognizerRef.current?.abort?.()
       stopSpeaking()
+      // Free any still-staged image previews (sent ones live on their bubbles).
+      releaseStaged(stagedRef.current)
     },
     [],
   )
@@ -275,32 +369,88 @@ export default function ChatView() {
         ))}
       </div>
 
-      <div className="composer">
-        {models && models.options.length > 1 && (
-          <select
-            className="model-select"
-            title="Which AI answers"
-            value={provider || models.defaultId}
-            onChange={(e) => setProvider(e.target.value)}
-          >
-            {models.options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-                {o.source === 'your key' ? ' · yours' : ''}
-                {o.tools === false ? ' · chat only' : ''}
-              </option>
+      <div
+        className={`composer ${dragging ? 'dragging' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault()
+          if (!dragging) setDragging(true)
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) setDragging(false)
+        }}
+        onDrop={onDrop}
+      >
+        {attachments.length > 0 && (
+          <div className="attach-strip">
+            {attachments.map((a) => (
+              <div key={a.id} className={`attach-chip ${a.kind}`}>
+                {a.kind === 'image' ? (
+                  <img src={a.previewUrl} alt={a.name} />
+                ) : (
+                  <span className="attach-ico" aria-hidden="true"><FileIcon /></span>
+                )}
+                <span className="attach-meta">
+                  <span className="attach-name">{a.name}</span>
+                  <span className="attach-sub">{a.ext.toUpperCase()} · {formatSize(a.size)}</span>
+                </span>
+                <button
+                  type="button"
+                  className="attach-remove"
+                  aria-label={`Remove ${a.name}`}
+                  onClick={() => removeAttachment(a.id)}
+                >
+                  <XIcon />
+                </button>
+              </div>
             ))}
-          </select>
+          </div>
         )}
-        <textarea
-          ref={inputRef}
-          rows={1}
-          value={input}
-          placeholder={listening ? 'Listening…' : 'Ask anything, or give an order…'}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        {speechSupported && (
+        <div className="composer-row">
+          {models && models.options.length > 1 && (
+            <select
+              className="model-select"
+              title="Which AI answers"
+              value={settings.defaultProvider || models.defaultId}
+              onChange={(e) => settings.set({ defaultProvider: e.target.value })}
+            >
+              {models.options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                  {o.source === 'your key' ? ' · yours' : ''}
+                  {o.tools === false ? ' · chat only' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ACCEPT}
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              addFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            className="icon-btn attach-btn"
+            title="Attach images or documents"
+            aria-label="Attach images or documents"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <PaperclipIcon />
+          </button>
+          <textarea
+            ref={inputRef}
+            rows={1}
+            value={input}
+            placeholder={listening ? 'Listening…' : 'Ask anything, or give an order…'}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
+          {speechSupported && (
           <button
             className={`icon-btn mic ${listening ? 'listening' : ''}`}
             title={listening ? 'Stop listening' : 'Talk instead of typing'}
@@ -321,10 +471,15 @@ export default function ChatView() {
         >
           <SpeakerIcon on={settings.voiceReplies} />
         </button>
-        <button className="btn send" onClick={() => send()} disabled={busy || !input.trim()}>
-          <SendIcon />
-          <span>Send</span>
-        </button>
+          <button
+            className="btn send"
+            onClick={() => send()}
+            disabled={busy || (!input.trim() && !attachments.length)}
+          >
+            <SendIcon />
+            <span>Send</span>
+          </button>
+        </div>
       </div>
     </section>
   )

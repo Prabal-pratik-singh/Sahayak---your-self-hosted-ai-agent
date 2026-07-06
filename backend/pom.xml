@@ -73,6 +73,13 @@
             <artifactId>spring-ai-starter-model-chat-memory-repository-jdbc</artifactId>
         </dependency>
 
+        <!-- Extracts text from uploaded documents (pdf, docx, txt, md, csv)
+             server-side via Apache Tika — the model never "opens" files itself -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-tika-document-reader</artifactId>
+        </dependency>
+
         <!-- Persistence: users, connections, scheduled tasks -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

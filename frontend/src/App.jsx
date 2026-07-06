@@ -62,6 +62,9 @@ export default function App() {
   const [toasts, setToasts] = useState([])
   const healthSeenRef = useRef({})
   const [prefill, setPrefill] = useState('')
+  // Files picked outside the chat (e.g. the dashboard ask bar) that the chat
+  // composer should stage on arrival — raw File objects, not uploads yet.
+  const [prefillFiles, setPrefillFiles] = useState([])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -160,8 +163,10 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     const params = new URLSearchParams(window.location.search)
-    if (params.get('connected') === 'linkedin') {
-      toast('LinkedIn connected ✓', 'ok')
+    const connected = params.get('connected')
+    if (connected) {
+      const label = connected.charAt(0).toUpperCase() + connected.slice(1)
+      toast(`${label} connected ✓`, 'ok')
       setView('integrations')
     } else if (params.get('error')) {
       toast(params.get('error'), 'error')
@@ -238,6 +243,8 @@ export default function App() {
     toast,
     prefill,
     setPrefill,
+    prefillFiles,
+    setPrefillFiles,
     setPaletteOpen,
     setVoiceOpen,
     sidebarOpen,

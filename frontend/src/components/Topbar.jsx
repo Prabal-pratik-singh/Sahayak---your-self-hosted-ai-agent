@@ -42,7 +42,7 @@ const STATUS_LABELS = {
 }
 
 export default function Topbar() {
-  const { view, user, online, tasks, settings, providerHealth, refreshHealth, setPaletteOpen, setVoiceOpen, setSidebarOpen, nav } = useApp()
+  const { view, user, online, tasks, settings, models, providerHealth, refreshHealth, setPaletteOpen, setVoiceOpen, setSidebarOpen, nav } = useApp()
   const [bellOpen, setBellOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [seenAt, setSeenAt] = useState(() => localStorage.getItem(SEEN_KEY) || '')
@@ -103,6 +103,21 @@ export default function Topbar() {
 
       <div className="top-actions">
         <span className={`presence ${online ? 'on' : 'off'}`} title={online ? 'Backend online' : 'Backend offline'} />
+
+        {models && models.options.length > 1 && (
+          <label className="brain-switch" title="Which AI answers your messages">
+            <span className="brain-dot" aria-hidden="true" />
+            <select
+              aria-label="Choose AI engine"
+              value={settings.defaultProvider || models.defaultId}
+              onChange={(e) => settings.set({ defaultProvider: e.target.value })}
+            >
+              {models.options.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <button className="search-pill" onClick={() => setPaletteOpen(true)}>
           <SearchIcon />

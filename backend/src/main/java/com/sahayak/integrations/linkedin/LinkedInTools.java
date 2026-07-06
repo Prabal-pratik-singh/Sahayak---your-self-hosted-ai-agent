@@ -1,5 +1,6 @@
 package com.sahayak.integrations.linkedin;
 
+import com.sahayak.activity.ActivityService;
 import com.sahayak.integrations.ConnectionService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -13,10 +14,15 @@ public class LinkedInTools {
 
     private final LinkedInService linkedInService;
     private final ConnectionService.LinkedInAccount account;
+    private final ActivityService activity;
+    private final Long userId;
 
-    public LinkedInTools(LinkedInService linkedInService, ConnectionService.LinkedInAccount account) {
+    public LinkedInTools(LinkedInService linkedInService, ConnectionService.LinkedInAccount account,
+                         ActivityService activity, Long userId) {
         this.linkedInService = linkedInService;
         this.account = account;
+        this.activity = activity;
+        this.userId = userId;
     }
 
     @Tool(description = """
@@ -29,7 +35,9 @@ public class LinkedInTools {
             return "ERROR: the LinkedIn connection has expired. Ask the user to reconnect LinkedIn in the Connections panel.";
         }
         try {
-            return "Posted on LinkedIn: " + linkedInService.post(account.accessToken(), account.personSub(), text);
+            String url = linkedInService.post(account.accessToken(), account.personSub(), text);
+            activity.record(userId, "linkedin", "Posted on LinkedIn");
+            return "Posted on LinkedIn: " + url;
         } catch (RestClientResponseException e) {
             return "ERROR: LinkedIn refused the post (" + e.getStatusCode() + "): " + shorten(e.getResponseBodyAsString());
         } catch (Exception e) {

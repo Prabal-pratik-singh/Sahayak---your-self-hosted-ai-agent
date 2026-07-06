@@ -37,6 +37,14 @@ function load() {
       if (w.includes('@') || w.includes(' ') || w.length > 20) stored.wakeWord = ''
       stored._v7 = true
     }
+    // v0.9.1: a real wake word is one short word (e.g. "sahayak"). Clear
+    // anything else — autofilled names like "mannkumarsinghprabal" slipped
+    // past the length check above and blocked voice mode.
+    if (!stored._v8) {
+      const w = (stored.wakeWord || '').trim()
+      if (w && !/^[a-zA-Z]{2,14}$/.test(w)) stored.wakeWord = ''
+      stored._v8 = true
+    }
     return { ...DEFAULTS, ...stored }
   } catch {
     return { ...DEFAULTS }

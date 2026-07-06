@@ -36,6 +36,13 @@ public class ConnectionService {
     public record WebhookConfig(String url) {
     }
 
+    /** The decrypted GitHub credentials for one user. */
+    public record GitHubAccount(String accessToken, String displayName) {
+    }
+
+    private record GitHubConfig(String accessToken) {
+    }
+
     private final ConnectionRepository repository;
     private final CryptoService crypto;
     private final ObjectMapper objectMapper;
@@ -115,6 +122,21 @@ public class ConnectionService {
                 .map(c -> fromJson(crypto.decrypt(c.getEncryptedConfig()), WebhookConfig.class).url());
     }
 
+    public ConnectionInfo saveGitHub(Long userId, String accessToken, String displayName) {
+        Connection connection = upsert(userId, Connection.Type.GITHUB);
+        connection.setDisplayName(displayName != null && !displayName.isBlank() ? displayName : "GitHub account");
+        connection.setEncryptedConfig(crypto.encrypt(toJson(new GitHubConfig(accessToken))));
+        connection.setExpiresAt(null); // GitHub OAuth-app tokens don't expire
+        return ConnectionInfo.from(repository.save(connection));
+    }
+
+    public Optional<GitHubAccount> gitHubAccount(Long userId) {
+        return repository.findByUserIdAndType(userId, Connection.Type.GITHUB)
+                .map(c -> new GitHubAccount(
+                        fromJson(crypto.decrypt(c.getEncryptedConfig()), GitHubConfig.class).accessToken(),
+                        c.getDisplayName()));
+    }
+
     /** One-line-per-app summary injected into the system prompt so the model knows what it can really do. */
     public String promptSummary(Long userId) {
         StringBuilder sb = new StringBuilder();
@@ -139,6 +161,11 @@ public class ConnectionService {
         sb.append(webhookUrl(userId, Connection.Type.SLACK).isPresent()
                 ? "- Slack: CONNECTED (sendSlackMessage works)."
                 : "- Slack: NOT connected.");
+        sb.append('\n');
+        sb.append(gitHubAccount(userId)
+                .map(a -> "- GitHub: CONNECTED as " + a.displayName()
+                        + " (createGitHubIssue, listMyGitHubRepos, searchGitHubIssues work).")
+                .orElse("- GitHub: NOT connected."));
         sb.append("\nFor anything NOT connected, the user can set it up on the Integrations page.");
         return sb.toString();
     }

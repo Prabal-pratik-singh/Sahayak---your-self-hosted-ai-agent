@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sahayak.auth.AuthenticatedUser;
 import com.sahayak.common.RateLimiter;
 import com.sahayak.monitoring.ProviderException;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.slf4j.Logger;
@@ -22,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 @RestController
@@ -32,9 +32,11 @@ public class ChatController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     public record ChatRequest(
-            @NotBlank @Size(max = 8000) String message,
+            // blank is allowed only when attachments are present (checked below)
+            @Size(max = 8000) String message,
             @Size(max = 64) @Pattern(regexp = "[A-Za-z0-9._-]*") String conversationId,
-            @Size(max = 20) @Pattern(regexp = "[a-z]*") String provider) {
+            @Size(max = 20) @Pattern(regexp = "[a-z]*") String provider,
+            @Size(max = 5) List<Long> attachmentIds) {
     }
 
     public record ChatResponse(String reply) {
@@ -53,8 +55,9 @@ public class ChatController {
     @PostMapping("/chat")
     public ChatResponse chat(@Validated @RequestBody ChatRequest request, Authentication authentication) {
         var user = checkedUser(authentication);
+        requireContent(request);
         return new ChatResponse(agentService.chat(
-                user, conversationRef(request), request.message(), request.provider()));
+                user, conversationRef(request), request.message(), request.provider(), request.attachmentIds()));
     }
 
     /**
@@ -66,7 +69,9 @@ public class ChatController {
     public Flux<ServerSentEvent<String>> chatStream(@Validated @RequestBody ChatRequest request,
                                                     Authentication authentication) {
         var user = checkedUser(authentication);
-        return agentService.chatStream(user, conversationRef(request), request.message(), request.provider())
+        requireContent(request);
+        return agentService.chatStream(user, conversationRef(request), request.message(), request.provider(),
+                        request.attachmentIds())
                 // If the provider stalls (no token for this long), fail loudly
                 // instead of leaving the user with an eternal spinner.
                 .timeout(Duration.ofSeconds(120))
@@ -96,6 +101,15 @@ public class ChatController {
                     "You are sending messages too quickly — wait a minute and try again.");
         }
         return user;
+    }
+
+    /** A message may be blank only when it carries attachments. */
+    private static void requireContent(ChatRequest request) {
+        boolean blankText = request.message() == null || request.message().isBlank();
+        boolean noFiles = request.attachmentIds() == null || request.attachmentIds().isEmpty();
+        if (blankText && noFiles) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message must not be blank");
+        }
     }
 
     private static String conversationRef(ChatRequest request) {

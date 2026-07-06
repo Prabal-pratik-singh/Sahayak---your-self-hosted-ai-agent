@@ -68,6 +68,15 @@ export default function IntegrationsView() {
     }
   }
 
+  const connectGitHub = async () => {
+    try {
+      const { url } = await api('/integrations/github/authorize')
+      window.location.href = url
+    } catch (e) {
+      toast(e.message, 'error')
+    }
+  }
+
   const Card = ({ type, title, blurb, children }) => {
     const c = connected(type)
     return (
@@ -138,6 +147,12 @@ export default function IntegrationsView() {
         <Card type="LINKEDIN" title="LinkedIn" blurb="Publish posts on your own profile (official OAuth).">
           <button className="btn ghost" onClick={connectLinkedIn}>
             Connect LinkedIn
+          </button>
+        </Card>
+
+        <Card type="GITHUB" title="GitHub" blurb="Create issues, list repos and search — as you (official OAuth).">
+          <button className="btn ghost" onClick={connectGitHub}>
+            Connect GitHub
           </button>
         </Card>
 

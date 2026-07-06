@@ -1,8 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../App.jsx'
+import { api } from '../api.js'
 
-// A day-grouped timeline of what the agent did: tasks scheduled / finished /
-// failed, plus conversations that moved. Built from data we already have.
+// A day-grouped timeline of what the agent did: real actions it performed
+// (posts, emails, messages), tasks scheduled / finished / failed, plus
+// conversations that moved.
+
+const ACTION_ICONS = { linkedin: '💼', email: '✉️', telegram: '✈️', discord: '🎮', slack: '📢', github: '🐙' }
 
 function dayLabel(iso) {
   const d = new Date(iso)
@@ -17,9 +21,19 @@ function dayLabel(iso) {
 
 export default function ActivityView() {
   const { tasks, conversations, openConversation } = useApp()
+  const [actions, setActions] = useState([])
+
+  useEffect(() => {
+    api('/activity').then(setActions).catch(() => {})
+  }, [])
 
   const events = useMemo(() => {
     const list = []
+    for (const a of actions) {
+      if (a.createdAt) {
+        list.push({ at: a.createdAt, kind: 'action', text: `${ACTION_ICONS[a.kind] || '⚡'} ${a.text}` })
+      }
+    }
     for (const t of tasks) {
       if (t.createdAt) {
         list.push({ at: t.createdAt, kind: 'scheduled', text: `Task #${t.id} scheduled — ${t.instruction}` })
@@ -38,7 +52,7 @@ export default function ActivityView() {
       }
     }
     return list.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 60)
-  }, [tasks, conversations])
+  }, [actions, tasks, conversations])
 
   const groups = useMemo(() => {
     const out = []

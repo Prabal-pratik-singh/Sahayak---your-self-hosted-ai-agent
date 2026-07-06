@@ -6,6 +6,13 @@ spring:
     virtual:
       enabled: true
 
+  servlet:
+    multipart:
+      # Chat attachments: 15 MB per file (matches AttachmentService), a little
+      # headroom on the whole request so several files can upload together.
+      max-file-size: 16MB
+      max-request-size: 80MB
+
   autoconfigure:
     # Vendor auto-configs refuse to start when their API key is blank, but every
     # provider must stay optional here (and BYOK builds per-user clients anyway) —
@@ -109,6 +116,12 @@ app:
     # Create an app at https://developer.linkedin.com to enable LinkedIn posting.
     client-id: ${LINKEDIN_CLIENT_ID:}
     client-secret: ${LINKEDIN_CLIENT_SECRET:}
+  github-oauth:
+    # Create an OAuth app at https://github.com/settings/developers to let users
+    # connect GitHub (create issues, list repos, search). This is SEPARATE from
+    # the GitHub Models AI provider above (app.github.*).
+    client-id: ${GITHUB_OAUTH_CLIENT_ID:}
+    client-secret: ${GITHUB_OAUTH_CLIENT_SECRET:}
 
 logging:
   level:

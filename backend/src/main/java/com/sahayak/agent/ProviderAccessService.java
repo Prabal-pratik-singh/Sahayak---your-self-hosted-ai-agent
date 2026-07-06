@@ -21,12 +21,13 @@ import java.util.Set;
 public class ProviderAccessService {
 
     /** One engine available to this user. */
-    public record AccessOption(String id, String label, String model, boolean ownKey, boolean toolCapable) {
+    public record AccessOption(String id, String label, String model, boolean ownKey, boolean toolCapable,
+                               boolean visionCapable) {
     }
 
     /** A fully resolved choice, ready to run a chat turn. */
     public record ResolvedProvider(String id, String label, ChatClient client, String healthScope,
-                                   boolean toolCapable) {
+                                   boolean toolCapable, boolean visionCapable) {
     }
 
     private final AiModelRegistry registry;
@@ -46,7 +47,7 @@ public class ProviderAccessService {
             boolean own = mine.contains(id);
             if (own || registry.has(id)) {
                 options.add(new AccessOption(id, factory.labelOf(id), factory.modelOf(id), own,
-                        factory.toolCapable(id)));
+                        factory.toolCapable(id), factory.visionCapable(id)));
             }
         }
         return options;
@@ -75,11 +76,12 @@ public class ProviderAccessService {
         Optional<ChatClient> own = userKeys.clientFor(userId, id);
         if (own.isPresent()) {
             return new ResolvedProvider(id, factory.labelOf(id), own.get(), id + ":u" + userId,
-                    factory.toolCapable(id));
+                    factory.toolCapable(id), factory.visionCapable(id));
         }
         ChatClient server = registry.clientOf(id);
         if (server != null) {
-            return new ResolvedProvider(id, factory.labelOf(id), server, id, factory.toolCapable(id));
+            return new ResolvedProvider(id, factory.labelOf(id), server, id,
+                    factory.toolCapable(id), factory.visionCapable(id));
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 factory.labelOf(id) + " is not available to you — this server has no key for it. "
@@ -105,5 +107,30 @@ public class ProviderAccessService {
                 .findFirst()
                 .map(o -> resolve(userId, o.id()))
                 .orElseGet(() -> resolve(userId, null));
+    }
+
+    /**
+     * For messages that include an IMAGE: text-only engines must never receive
+     * image input, so when the chosen engine can't see, auto-route this one
+     * message to a vision-capable engine — preferring one the user brought
+     * their own key for (BYOK), then any configured one. Empty when the chosen
+     * engine already sees images; throws 400 when nobody here can.
+     */
+    public Optional<ResolvedProvider> visionFallback(Long userId, ResolvedProvider chosen) {
+        if (chosen.visionCapable()) {
+            return Optional.empty();
+        }
+        List<AccessOption> seeing = optionsFor(userId).stream()
+                .filter(AccessOption::visionCapable)
+                .toList();
+        return seeing.stream().filter(AccessOption::ownKey).findFirst()
+                .or(() -> seeing.stream().findFirst())
+                .map(o -> resolve(userId, o.id()))
+                .or(() -> {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            chosen.label() + " can't see images, and no vision-capable engine is available. "
+                                    + "Add a key for Gemini, Claude or ChatGPT in Settings → AI engine keys, "
+                                    + "or send the message without the image.");
+                });
     }
 }

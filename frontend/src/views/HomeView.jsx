@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../App.jsx'
 import { api } from '../api.js'
 import RingGauge from '../components/RingGauge.jsx'
-import { MicIcon, SendIcon } from '../components/Icons.jsx'
+import { FileIcon, MicIcon, PaperclipIcon, SendIcon, XIcon } from '../components/Icons.jsx'
 import { speechSupported } from '../hooks/useSpeech.js'
+import { ACCEPT, formatSize, releaseStaged, stageFiles } from '../attachments.js'
 
 // three.js is heavy (~250KB gz) — load the WebGL hero as its own async chunk so
 // the dashboard shell paints instantly and the sphere streams in behind it.
@@ -50,6 +51,15 @@ function relativeTime(iso) {
   return days < 30 ? `${days}d ago` : formatTime(iso)
 }
 
+const ACTION_ICONS = {
+  linkedin: '💼',
+  email: '✉️',
+  telegram: '✈️',
+  discord: '🎮',
+  slack: '📢',
+  github: '🐙',
+}
+
 const PROVIDER_STATUS = {
   ok: ['Healthy', 'ok'],
   limited: ['Rate-limited', 'warn'],
@@ -60,13 +70,23 @@ const PROVIDER_STATUS = {
 export default function HomeView() {
   const {
     user, tasks, conversations, providerHealth, sysInfo, latencyMs, online,
-    nav, newChat, openConversation, setVoiceOpen, setPrefill, toast, settings,
+    nav, newChat, openConversation, setVoiceOpen, setPrefill, setPrefillFiles, toast, settings,
   } = useApp()
   const [connections, setConnections] = useState([])
+  const [actions, setActions] = useState([])
   const [ask, setAsk] = useState('')
+  const [askFiles, setAskFiles] = useState([])
+  const askFileInputRef = useRef(null)
+  // Latest staged files for unmount cleanup (avoids a stale closure).
+  const askFilesRef = useRef([])
+  askFilesRef.current = askFiles
+
+  // Free preview URLs if the user navigates away without sending.
+  useEffect(() => () => releaseStaged(askFilesRef.current), [])
 
   useEffect(() => {
     api('/connections').then(setConnections).catch(() => {})
+    api('/activity').then(setActions).catch(() => {})
   }, [])
 
   const pending = tasks.filter((t) => t.status === 'PENDING')
@@ -75,6 +95,10 @@ export default function HomeView() {
 
   const activity = useMemo(() => {
     const items = []
+    // real actions Sahayak took (immediate OR scheduled) — the unified record
+    for (const a of actions) {
+      if (a.createdAt) items.push({ at: a.createdAt, icon: ACTION_ICONS[a.kind] || '⚡', text: a.text })
+    }
     for (const t of tasks) {
       if ((t.status === 'DONE' || t.status === 'FAILED') && t.runAt) {
         items.push({ at: t.runAt, icon: t.status === 'DONE' ? '✅' : '⚠️', text: `Task #${t.id} ${t.status === 'DONE' ? 'finished' : 'failed'} — ${t.instruction}` })
@@ -83,8 +107,8 @@ export default function HomeView() {
     for (const c of conversations.slice(0, 6)) {
       if (c.updatedAt) items.push({ at: c.updatedAt, icon: '💬', text: `Chat "${c.title}"`, conversation: c })
     }
-    return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 4)
-  }, [tasks, conversations])
+    return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6)
+  }, [actions, tasks, conversations])
 
   // System health: backend reachability + share of AI providers with no issues.
   const healthyProviders = providerHealth.filter((p) => p.status === 'ok').length
@@ -108,13 +132,33 @@ export default function HomeView() {
     await newChat()
   }
 
+  const addAskFiles = (fileList) => {
+    const accepted = stageFiles(fileList, askFiles, (msg) => toast(msg, 'error'))
+    if (accepted.length) setAskFiles((c) => [...c, ...accepted])
+  }
+
+  const removeAskFile = (id) => {
+    setAskFiles((c) => {
+      const found = c.find((a) => a.id === id)
+      if (found?.previewUrl) URL.revokeObjectURL(found.previewUrl)
+      return c.filter((a) => a.id !== id)
+    })
+  }
+
   const askNow = async (e) => {
     e.preventDefault()
     const text = ask.trim()
-    if (!text) return
+    if (!text && !askFiles.length) return
     setAsk('')
+    if (askFiles.length) {
+      // Hand the raw File objects to the chat composer — it stages them with
+      // its own previews, so release ours here.
+      setPrefillFiles(askFiles.map((a) => a.file))
+      releaseStaged(askFiles)
+      setAskFiles([])
+    }
     setPrefill(text)
-    await newChat() // lands in the chat with the message ready — Enter sends it
+    await newChat() // lands in the chat with message + attachments ready — Enter sends it
   }
 
   return (
@@ -142,6 +186,31 @@ export default function HomeView() {
             ))}
           </div>
 
+          {askFiles.length > 0 && (
+            <div className="attach-strip dash">
+              {askFiles.map((a) => (
+                <div key={a.id} className={`attach-chip ${a.kind}`}>
+                  {a.kind === 'image' ? (
+                    <img src={a.previewUrl} alt={a.name} />
+                  ) : (
+                    <span className="attach-ico" aria-hidden="true"><FileIcon /></span>
+                  )}
+                  <span className="attach-meta">
+                    <span className="attach-name">{a.name}</span>
+                    <span className="attach-sub">{a.ext.toUpperCase()} · {formatSize(a.size)}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="attach-remove"
+                    aria-label={`Remove ${a.name}`}
+                    onClick={() => removeAskFile(a.id)}
+                  >
+                    <XIcon />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <form className="dash-composer" onSubmit={askNow}>
             <input
               value={ask}
@@ -149,12 +218,32 @@ export default function HomeView() {
               placeholder="Type your message here…"
               aria-label="Ask Sahayak"
             />
+            <input
+              ref={askFileInputRef}
+              type="file"
+              multiple
+              accept={ACCEPT}
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                addAskFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+            <button
+              type="button"
+              className="icon-btn"
+              title="Attach images or documents"
+              aria-label="Attach images or documents"
+              onClick={() => askFileInputRef.current?.click()}
+            >
+              <PaperclipIcon />
+            </button>
             {speechSupported && (
               <button type="button" className="icon-btn" title="Voice mode" aria-label="Voice mode" onClick={() => setVoiceOpen(true)}>
                 <MicIcon />
               </button>
             )}
-            <button type="submit" className="btn" disabled={!ask.trim()} aria-label="Send">
+            <button type="submit" className="btn" disabled={!ask.trim() && !askFiles.length} aria-label="Send">
               <SendIcon />
             </button>
           </form>

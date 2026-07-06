@@ -109,7 +109,7 @@ public class LinkedInService {
                 "specificContent", Map.of("com.linkedin.ugc.ShareContent", Map.of(
                         "shareCommentary", Map.of("text", text),
                         "shareMediaCategory", "NONE")),
-                "visibility", Map.of("com.linkedin.member.NetworkVisibility", "PUBLIC"));
+                "visibility", Map.of("com.linkedin.ugc.MemberNetworkVisibility", "PUBLIC"));
 
         ResponseEntity<String> response = http.post()
                 .uri(POSTS_URL)

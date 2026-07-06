@@ -1,5 +1,6 @@
 package com.sahayak.integrations.email;
 
+import com.sahayak.activity.ActivityService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
@@ -11,10 +12,14 @@ public class EmailTools {
 
     private final EmailService emailService;
     private final EmailSettings settings;
+    private final ActivityService activity;
+    private final Long userId;
 
-    public EmailTools(EmailService emailService, EmailSettings settings) {
+    public EmailTools(EmailService emailService, EmailSettings settings, ActivityService activity, Long userId) {
         this.emailService = emailService;
         this.settings = settings;
+        this.activity = activity;
+        this.userId = userId;
     }
 
     @Tool(description = """
@@ -27,6 +32,7 @@ public class EmailTools {
             @ToolParam(description = "Plain-text body of the email") String body) {
         try {
             emailService.send(settings, to, subject, body);
+            activity.record(userId, "email", "Sent an email to " + to);
             return "Email sent to " + to + ".";
         } catch (Exception e) {
             return "ERROR: could not send the email: " + e.getMessage();

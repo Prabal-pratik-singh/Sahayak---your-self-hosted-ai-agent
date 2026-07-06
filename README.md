@@ -157,6 +157,22 @@ Each user then: Connections → **Connect LinkedIn** → LinkedIn login screen �
 
 > Note: LinkedIn access tokens last ~60 days and can't be auto-renewed on standard apps. When one expires, the connection shows **EXPIRED** and reconnecting takes two clicks.
 
+### Connect GitHub
+
+Same shape as LinkedIn — the **server owner** registers one free GitHub OAuth app, then every user clicks "Connect GitHub." The agent can then create issues, list your repos, and search issues/PRs as you.
+
+One-time setup (server owner):
+1. Go to https://github.com/settings/developers → **OAuth Apps** → **New OAuth App**.
+2. Fill in any **Application name** and **Homepage URL**, and set the **Authorization callback URL** to exactly:
+   `http://localhost:8080/api/integrations/github/callback`
+   (replace host with your real backend address when deployed — same value as `APP_BASE_URL`)
+3. Create it, then **Generate a new client secret**. Copy the **Client ID** and **Client Secret**.
+4. Put them in your environment as `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` (`.env` for Docker) and restart the backend.
+
+Each user then: Integrations → **Connect GitHub** → GitHub authorize screen → done. Try: *"List my GitHub repos,"* then *"Open an issue in owner/repo titled 'Fix login bug'."*
+
+> The GitHub integration (repos/issues) is **separate** from the GitHub Models AI provider (`GITHUB_MODELS_KEY`) — different feature, different setting.
+
 ---
 
 ## Settings (environment variables)
@@ -180,6 +196,7 @@ Each user then: Connections → **Connect LinkedIn** → LinkedIn login screen �
 | `APP_ALLOW_SIGNUPS` | no | `true` | `false` = no new accounts (first account always allowed) |
 | `APP_CHAT_RATE_LIMIT` | no | `30` | Max chat messages per user per minute |
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | for LinkedIn | — | From your LinkedIn developer app |
+| `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | for GitHub | — | From your GitHub OAuth app (separate from `GITHUB_MODELS_KEY`) |
 | `APP_FRONTEND_URL` | when deployed | `http://localhost:5173` | Browser app address (redirects + CORS) |
 | `APP_BASE_URL` | when deployed | `http://localhost:8080` | Public backend address (LinkedIn redirect) |
 | `TZ` (Docker) | no | `UTC` | Server timezone, so "tomorrow 6 PM" is your 6 PM |
@@ -291,6 +308,8 @@ Add a connect button/form in `frontend/src/components/Connections.jsx`, and a li
 - **"Could not log in to that mailbox"** → for Gmail you need an App Password (normal password won't work); check host/port for other providers.
 - **LinkedIn button says "not configured"** → set `LINKEDIN_CLIENT_ID`/`LINKEDIN_CLIENT_SECRET` and restart the backend.
 - **LinkedIn connect loops back with an error** → the redirect URL in your LinkedIn app must EXACTLY match `APP_BASE_URL + /api/integrations/linkedin/callback`.
+- **GitHub button says "not configured"** → set `GITHUB_OAUTH_CLIENT_ID`/`GITHUB_OAUTH_CLIENT_SECRET` and restart the backend.
+- **GitHub connect shows a redirect mismatch** → the OAuth app's **Authorization callback URL** must EXACTLY match `APP_BASE_URL + /api/integrations/github/callback`.
 - **Frontend can't reach backend (dev)** → backend must be on 8080; Vite proxies `/api` there (see `frontend/vite.config.js`).
 - **Mic button is missing** → your browser has no speech recognition (Firefox/Safari) — use Chrome or Edge. Voice *output* (speaker button) works everywhere.
 - **Every chat message failed with "already exists" (pre-0.3.0)** → fixed: the chat-history table's conversation-id column was too short for real browser ids; 0.3.0 widens it automatically at startup.
