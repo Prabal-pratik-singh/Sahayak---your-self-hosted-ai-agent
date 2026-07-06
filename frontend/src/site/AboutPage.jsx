@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
 
 const FEATURES = [
-  { icon: '🧠', title: 'Three AI brains', text: 'Claude, ChatGPT and Gemini — configure any subset, switch per message.' },
-  { icon: '🎙️', title: 'Real voice mode', text: 'Talk hands-free with a wake word; it listens, acts and answers out loud.' },
+  { icon: '🧠', title: 'Eight AI engines', text: 'Claude, ChatGPT, Gemini, Groq and more — bring your own keys, switch per message.' },
+  { icon: '🎙️', title: 'Real voice mode', text: 'Talk hands-free like a phone call — it listens, acts, answers out loud, then listens again.' },
+  { icon: '📎', title: 'Files & vision', text: 'Attach images and documents; it sees photos, reads PDFs, and answers about them in chat.' },
   { icon: '🌐', title: 'Live internet tools', text: 'Weather anywhere, Wikipedia, and a guarded web-page reader — no extra keys.' },
   { icon: '📌', title: 'Long-term memory', text: 'Say "remember…" once; it personalizes every future conversation.' },
   { icon: '⏰', title: 'Scheduling that survives', text: 'Tasks live in Postgres and run on time even after restarts.' },
@@ -16,9 +17,10 @@ const STACK = [
 
 const ROADMAP = [
   { when: 'Shipped', what: 'Multi-user accounts, encrypted per-user integrations, scheduler' },
-  { when: 'Shipped', what: 'Multi-AI (Claude / ChatGPT / Gemini) with per-message switching' },
+  { when: 'Shipped', what: '8 AI engines with bring-your-own-key and per-message switching' },
   { when: 'Shipped', what: 'Voice mode, web tools, long-term memory, streaming replies' },
-  { when: 'Next', what: 'File & image understanding (multimodal chat)' },
+  { when: 'Shipped', what: 'Attachments: image vision + PDF/Word/CSV analysis in chat' },
+  { when: 'Shipped', what: 'LinkedIn image posts (single & multi-photo, schedulable), GitHub, activity feed' },
   { when: 'Next', what: 'Recurring tasks ("every Monday 9 AM") and approval buttons for risky actions' },
   { when: 'Later', what: 'Server-side voice (works in every browser), Google Calendar, WhatsApp Business' },
 ]
@@ -32,9 +34,10 @@ export default function AboutPage() {
           A personal AI agent that is <span className="grad-text">actually yours</span>.
         </h1>
         <p>
-          Sahayak (Hindi: <i>helper</i>) is a self-hosted AI assistant. It chats, speaks, looks
-          things up live, remembers what matters, and takes real actions — email, LinkedIn,
-          Telegram, Discord, Slack — through <b>your own</b> accounts, on <b>your own</b> server.
+          Sahayak (Hindi: <i>helper</i>) is a self-hosted AI assistant. It chats, speaks, sees
+          your images, reads your documents, remembers what matters, and takes real actions —
+          email, LinkedIn, GitHub, Telegram, Discord, Slack — through <b>your own</b> accounts,
+          on <b>your own</b> server.
         </p>
         <div className="site-hero-actions">
           <Link to="/" className="btn">Try it now</Link>

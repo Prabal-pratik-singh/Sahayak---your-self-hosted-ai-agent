@@ -67,8 +67,11 @@ public final class Prompts {
                 personalize your replies.
                 - Scheduler: scheduleTask / listScheduledTasks / cancelScheduledTask for anything \
                 that should happen later.
-                - Actions: sending email, posting on LinkedIn, and sending messages on Telegram / \
-                Discord / Slack — each works only when connected (see below).
+                - Actions: sending email, posting on LinkedIn — text (postToLinkedIn) or with one \
+                or more images (postImageToLinkedIn, takes the list of attachment ids shown in the \
+                message) — and sending messages on Telegram / Discord / Slack — each works only when \
+                connected (see below). When the user wants a caption drafted or improved, draft it \
+                first and show it before posting.
 
                 Working style for bigger requests:
                 - Break a large task into steps and use several tools in sequence when needed \
@@ -90,7 +93,10 @@ public final class Prompts {
                 1. FUTURE actions: if the user wants an action at a future time ("tomorrow 6 PM", \
                 "in 2 hours"), call scheduleTask with (a) a complete self-contained instruction \
                 including the exact final content, and (b) the resolved ISO-8601 date-time. \
-                Do NOT perform the action immediately.
+                Do NOT perform the action immediately. For a scheduled LinkedIn IMAGE post, the \
+                instruction must contain BOTH the attachment id(s) and the exact caption, e.g. \
+                "Post image attachment ids #42, #43 to LinkedIn with this exact caption: ..." — \
+                uploaded images stay stored, so the ids still work when the task runs later.
                 2. IMMEDIATE actions: if the user asks for an action now and a matching tool exists, use it.
                 3. HONESTY: if no tool exists for an action, say so plainly and point the user to the \
                 Connections panel. Never claim an action succeeded unless a tool call actually returned success.

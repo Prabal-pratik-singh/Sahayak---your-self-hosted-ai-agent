@@ -2,6 +2,7 @@ package com.sahayak.integrations.linkedin;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,6 +14,7 @@ import org.springframework.web.client.RestClient;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,6 +34,14 @@ public class LinkedInService {
     private static final String TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
     private static final String USERINFO_URL = "https://api.linkedin.com/v2/userinfo";
     private static final String POSTS_URL = "https://api.linkedin.com/v2/ugcPosts";
+    private static final String ASSETS_URL = "https://api.linkedin.com/v2/assets?action=registerUpload";
+    // The classic ugcPosts API above renders only ONE image per post. Posts
+    // with SEVERAL images need LinkedIn's newer versioned API (below), which
+    // requires a LinkedIn-Version header (YYYYMM, monthly releases, valid ~1
+    // year — bump this if LinkedIn ever rejects it as expired).
+    private static final String REST_IMAGES_URL = "https://api.linkedin.com/rest/images?action=initializeUpload";
+    private static final String REST_POSTS_URL = "https://api.linkedin.com/rest/posts";
+    private static final String LINKEDIN_VERSION = "202504";
     private static final String SCOPES = "openid profile email w_member_social";
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -122,6 +132,169 @@ public class LinkedInService {
 
         String postId = response.getHeaders().getFirst("X-RestLi-Id");
         return postId != null ? "https://www.linkedin.com/feed/update/" + postId : "(published)";
+    }
+
+    /**
+     * Publishes a post with an image, following LinkedIn's official 3-step
+     * flow: register an upload slot for the member, PUT the raw image bytes to
+     * the returned URL, then create the ugcPost referencing the asset URN.
+     * Returns the post's URL. The text-only {@link #post} stays untouched.
+     */
+    public String postWithImage(String accessToken, String personSub, String text,
+                                byte[] imageBytes, String imageMime) {
+        String author = "urn:li:person:" + personSub;
+
+        // 1) register the image upload
+        Map<String, Object> register = Map.of("registerUploadRequest", Map.of(
+                "recipes", List.of("urn:li:digitalmediaRecipe:feedshare-image"),
+                "owner", author,
+                "serviceRelationships", List.of(Map.of(
+                        "relationshipType", "OWNER",
+                        "identifier", "urn:li:userGeneratedContent"))));
+
+        JsonNode registered = http.post()
+                .uri(ASSETS_URL)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header("X-Restli-Protocol-Version", "2.0.0")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(register)
+                .retrieve()
+                .body(JsonNode.class);
+
+        String uploadUrl = registered.at(
+                "/value/uploadMechanism/com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest/uploadUrl")
+                .asText("");
+        String asset = registered.at("/value/asset").asText("");
+        if (uploadUrl.isEmpty() || asset.isEmpty()) {
+            throw new IllegalStateException("LinkedIn did not return an upload URL for the image.");
+        }
+
+        // 2) upload the raw bytes
+        http.put()
+                .uri(uploadUrl)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.parseMediaType(imageMime))
+                .body(imageBytes)
+                .retrieve()
+                .toBodilessEntity();
+
+        // 3) publish the post referencing the uploaded asset
+        Map<String, Object> body = Map.of(
+                "author", author,
+                "lifecycleState", "PUBLISHED",
+                "specificContent", Map.of("com.linkedin.ugc.ShareContent", Map.of(
+                        "shareCommentary", Map.of("text", text),
+                        "shareMediaCategory", "IMAGE",
+                        "media", List.of(Map.of(
+                                "status", "READY",
+                                "media", asset)))),
+                "visibility", Map.of("com.linkedin.ugc.MemberNetworkVisibility", "PUBLIC"));
+
+        ResponseEntity<String> response = http.post()
+                .uri(POSTS_URL)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header("X-Restli-Protocol-Version", "2.0.0")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .toEntity(String.class);
+
+        String postId = response.getHeaders().getFirst("X-RestLi-Id");
+        return postId != null ? "https://www.linkedin.com/feed/update/" + postId : "(published)";
+    }
+
+    /** One image ready for upload: its raw bytes and MIME type. */
+    public record ImagePayload(byte[] bytes, String mime) {
+    }
+
+    /**
+     * Publishes a post with one OR several images. A single image goes through
+     * the proven ugcPosts flow ({@link #postWithImage}); two or more use the
+     * versioned Posts API's multiImage content, which is the only way LinkedIn
+     * renders a true multi-image post.
+     */
+    public String postWithImages(String accessToken, String personSub, String text, List<ImagePayload> images) {
+        if (images.isEmpty()) {
+            throw new IllegalArgumentException("No images to post.");
+        }
+        if (images.size() == 1) {
+            return postWithImage(accessToken, personSub, text, images.get(0).bytes(), images.get(0).mime());
+        }
+
+        String author = "urn:li:person:" + personSub;
+
+        // 1) initialize + upload every image, collecting its urn:li:image URN
+        List<Map<String, String>> imageRefs = new java.util.ArrayList<>();
+        for (ImagePayload image : images) {
+            JsonNode initialized = http.post()
+                    .uri(REST_IMAGES_URL)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .header("LinkedIn-Version", LINKEDIN_VERSION)
+                    .header("X-Restli-Protocol-Version", "2.0.0")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("initializeUploadRequest", Map.of("owner", author)))
+                    .retrieve()
+                    .body(JsonNode.class);
+
+            String uploadUrl = initialized.at("/value/uploadUrl").asText("");
+            String imageUrn = initialized.at("/value/image").asText("");
+            if (uploadUrl.isEmpty() || imageUrn.isEmpty()) {
+                throw new IllegalStateException("LinkedIn did not return an upload URL for one of the images.");
+            }
+
+            http.put()
+                    .uri(uploadUrl)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(image.bytes())
+                    .retrieve()
+                    .toBodilessEntity();
+
+            imageRefs.add(Map.of("id", imageUrn));
+        }
+
+        // 2) one post referencing all uploaded images
+        Map<String, Object> body = Map.of(
+                "author", author,
+                "commentary", escapeLittleText(text),
+                "visibility", "PUBLIC",
+                "distribution", Map.of(
+                        "feedDistribution", "MAIN_FEED",
+                        "targetEntities", List.of(),
+                        "thirdPartyDistributionChannels", List.of()),
+                "content", Map.of("multiImage", Map.of("images", imageRefs)),
+                "lifecycleState", "PUBLISHED",
+                "isReshareDisabledByViewer", false);
+
+        ResponseEntity<String> response = http.post()
+                .uri(REST_POSTS_URL)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header("LinkedIn-Version", LINKEDIN_VERSION)
+                .header("X-Restli-Protocol-Version", "2.0.0")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .toEntity(String.class);
+
+        String postId = response.getHeaders().getFirst("x-restli-id");
+        return postId != null ? "https://www.linkedin.com/feed/update/" + postId : "(published)";
+    }
+
+    /**
+     * The versioned Posts API parses "commentary" as Little Text markup, where
+     * these characters are reserved — a caption containing a bare "(" or "@"
+     * would be rejected or mangled, so each one is backslash-escaped to render
+     * literally. (The classic ugcPosts flow needs no escaping.)
+     */
+    static String escapeLittleText(String text) {
+        StringBuilder out = new StringBuilder(text.length() + 8);
+        for (char c : text.toCharArray()) {
+            if ("\\|{}@[]()<>#*_~".indexOf(c) >= 0) {
+                out.append('\\');
+            }
+            out.append(c);
+        }
+        return out.toString();
     }
 
     private static String encode(String value) {

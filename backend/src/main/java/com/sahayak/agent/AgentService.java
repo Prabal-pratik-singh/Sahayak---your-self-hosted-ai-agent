@@ -222,7 +222,8 @@ public class AgentService {
         connectionService.emailSettings(user.id())
                 .ifPresent(settings -> tools.add(new EmailTools(emailService, settings, activityService, user.id())));
         connectionService.linkedInAccount(user.id())
-                .ifPresent(account -> tools.add(new LinkedInTools(linkedInService, account, activityService, user.id())));
+                .ifPresent(account -> tools.add(new LinkedInTools(linkedInService, account, activityService,
+                        attachmentService, user.id())));
         connectionService.gitHubAccount(user.id())
                 .ifPresent(account -> tools.add(new GitHubTools(gitHubService, account.accessToken(), activityService, user.id())));
         return spec.tools(tools.toArray());
@@ -242,6 +243,17 @@ public class AgentService {
                 (userMessage == null || userMessage.isBlank())
                         ? "Please look at the attached file(s) and respond to them."
                         : userMessage);
+        // Attached images also get their storage ids listed, so the model can
+        // pass them to postImageToLinkedIn — or embed them in a scheduleTask
+        // instruction (storage outlives the chat, so a post firing days later
+        // still finds its image).
+        String imageIds = files.stream()
+                .filter(f -> "image".equals(f.getKind()))
+                .map(f -> "attachment id #" + f.getId() + " (" + f.getFilename() + ")")
+                .collect(Collectors.joining(", "));
+        if (!imageIds.isEmpty()) {
+            text.append("\n\n[Attached image(s), also sent to you visually: ").append(imageIds).append(".]");
+        }
         int budget = MAX_DOC_CHARS_TOTAL;
         for (StoredFile file : files) {
             if (!"doc".equals(file.getKind())) {

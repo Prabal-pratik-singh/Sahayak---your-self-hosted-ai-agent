@@ -15,6 +15,22 @@ const UNSUPPORTED = [
 
 const EMPTY_EMAIL = { host: 'smtp.gmail.com', port: 587, username: '', password: '', fromAddress: '' }
 
+// Step-by-step Gmail walkthrough for non-technical users. Gmail blocks normal
+// passwords for apps on purpose — an App Password is the official way in.
+const GMAIL_GUIDE = {
+  tier: 'Free · ~2 minutes',
+  note: 'Your normal Gmail password will NOT work here — Google blocks it for apps on purpose. You create a special 16-character "App Password" just for Sahayak (revocable anytime).',
+  steps: [
+    'Open your Google Account → Security, and turn ON "2-Step Verification" (App Passwords only appear after this is on).',
+    'Open the App Passwords page with the button below — sign in again if Google asks.',
+    'Under "App name" type Sahayak and click Create.',
+    'Google shows a 16-character code like "abcd efgh ijkl mnop" — copy it (spaces don\'t matter).',
+    'Back here: keep host smtp.gmail.com and port 587, enter your full Gmail address as the login, and paste the 16-character code as the password.',
+    'Click "Save & test" — Sahayak checks the mailbox connection right away.',
+  ],
+  link: 'https://myaccount.google.com/apppasswords',
+}
+
 export default function IntegrationsView() {
   const { toast } = useApp()
   const [connections, setConnections] = useState([])
@@ -23,6 +39,7 @@ export default function IntegrationsView() {
   const [email, setEmail] = useState(EMPTY_EMAIL)
   const [telegram, setTelegram] = useState({ botToken: '', chatId: '' })
   const [webhook, setWebhook] = useState('')
+  const [showMailGuide, setShowMailGuide] = useState(false)
 
   const load = () => api('/connections').then(setConnections).catch((e) => toast(e.message, 'error'))
   useEffect(() => {
@@ -114,7 +131,38 @@ export default function IntegrationsView() {
                 submit('/connections/email', { ...email, port: Number(email.port), fromAddress: email.fromAddress || null }, 'Email connected ✓')
               }}
             >
-              <p className="hint">Gmail: enable 2-step verification, create an App Password, paste it below. Other providers: search “provider SMTP settings”.</p>
+              <div className="key-guide-wrap">
+                <button
+                  type="button"
+                  className="key-guide-toggle"
+                  aria-expanded={showMailGuide}
+                  onClick={() => setShowMailGuide((v) => !v)}
+                >
+                  <span className={`guide-chevron ${showMailGuide ? 'open' : ''}`} aria-hidden="true">›</span>
+                  How do I connect Gmail? (step by step)
+                </button>
+                {showMailGuide && (
+                  <div className="key-guide">
+                    <div className="key-guide-top">
+                      <span className="chip ok">{GMAIL_GUIDE.tier}</span>
+                      <p className="key-guide-note">{GMAIL_GUIDE.note}</p>
+                    </div>
+                    <ol className="key-guide-steps">
+                      {GMAIL_GUIDE.steps.map((step, i) => (
+                        <li key={i}>{step}</li>
+                      ))}
+                    </ol>
+                    <div className="key-guide-actions">
+                      <a className="btn ghost" href={GMAIL_GUIDE.link} target="_blank" rel="noopener noreferrer">
+                        Open Google App Passwords ↗
+                      </a>
+                    </div>
+                    <p className="key-guide-fineprint">
+                      Using Outlook, Zoho or another mailbox instead? Search "your provider + SMTP settings" and fill the same fields.
+                    </p>
+                  </div>
+                )}
+              </div>
               <div className="form-row">
                 <label className="field grow">
                   SMTP host
