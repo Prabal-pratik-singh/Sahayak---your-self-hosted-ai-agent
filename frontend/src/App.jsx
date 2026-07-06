@@ -165,7 +165,8 @@ export default function App() {
     const params = new URLSearchParams(window.location.search)
     const connected = params.get('connected')
     if (connected) {
-      const label = connected.charAt(0).toUpperCase() + connected.slice(1)
+      // "google-calendar" → "Google Calendar"
+      const label = connected.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
       toast(`${label} connected ✓`, 'ok')
       setView('integrations')
     } else if (params.get('error')) {

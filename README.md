@@ -173,6 +173,22 @@ Each user then: Integrations → **Connect GitHub** → GitHub authorize screen 
 
 > The GitHub integration (repos/issues) is **separate** from the GitHub Models AI provider (`GITHUB_MODELS_KEY`) — different feature, different setting.
 
+### Connect Google Calendar
+
+Same shape again — the **server owner** registers one free Google Cloud project, then every user clicks "Connect Google Calendar." The agent can then create events on their real calendar and read their upcoming schedule.
+
+One-time setup (server owner):
+1. Go to https://console.cloud.google.com → create a project (any name, free).
+2. **APIs & Services → Library** → search "Google Calendar API" → **Enable**.
+3. **APIs & Services → OAuth consent screen** → User type **External** → fill the app name + your email (the rest can stay empty).
+4. **APIs & Services → Credentials** → **Create credentials → OAuth client ID** → type **Web application**, and add this exact **Authorized redirect URI**:
+   `http://localhost:8080/api/integrations/google-calendar/callback`
+   (replace host with your real backend address when deployed — same value as `APP_BASE_URL`)
+5. Copy the **Client ID** and **Client Secret** into `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` (`.env` for Docker) and restart the backend.
+6. While your consent screen is in **Testing** mode, add each user's Gmail address under **Test users** (up to 100). Alternatively publish the app: users then see Google's "unverified app" warning once and click *Advanced → Continue* — it works, Google just hasn't reviewed the app.
+
+Each user then: Integrations → **Connect Google Calendar** → Google consent screen → done (once — the connection refreshes itself). Try: *"Put 'dentist' on my calendar tomorrow at 5 PM,"* then *"What's on my calendar this week?"*
+
 ---
 
 ## Settings (environment variables)
@@ -197,6 +213,7 @@ Each user then: Integrations → **Connect GitHub** → GitHub authorize screen 
 | `APP_CHAT_RATE_LIMIT` | no | `30` | Max chat messages per user per minute |
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | for LinkedIn | — | From your LinkedIn developer app |
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | for GitHub | — | From your GitHub OAuth app (separate from `GITHUB_MODELS_KEY`) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | for Google Calendar | — | From your Google Cloud OAuth client (Calendar API enabled) |
 | `APP_FRONTEND_URL` | when deployed | `http://localhost:5173` | Browser app address (redirects + CORS) |
 | `APP_BASE_URL` | when deployed | `http://localhost:8080` | Public backend address (LinkedIn redirect) |
 | `TZ` (Docker) | no | `UTC` | Server timezone, so "tomorrow 6 PM" is your 6 PM |

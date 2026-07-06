@@ -11,6 +11,8 @@ import com.sahayak.integrations.email.EmailService;
 import com.sahayak.integrations.email.EmailTools;
 import com.sahayak.integrations.github.GitHubService;
 import com.sahayak.integrations.github.GitHubTools;
+import com.sahayak.integrations.google.GoogleCalendarService;
+import com.sahayak.integrations.google.GoogleCalendarTools;
 import com.sahayak.integrations.linkedin.LinkedInService;
 import com.sahayak.integrations.linkedin.LinkedInTools;
 import com.sahayak.integrations.messaging.MessagingTools;
@@ -54,6 +56,7 @@ public class AgentService {
     private final EmailService emailService;
     private final LinkedInService linkedInService;
     private final GitHubService gitHubService;
+    private final GoogleCalendarService googleCalendarService;
     private final TelegramService telegramService;
     private final WebhookService webhookService;
     private final WebTools webTools;
@@ -70,6 +73,7 @@ public class AgentService {
                         EmailService emailService,
                         LinkedInService linkedInService,
                         GitHubService gitHubService,
+                        GoogleCalendarService googleCalendarService,
                         TelegramService telegramService,
                         WebhookService webhookService,
                         WebTools webTools,
@@ -85,6 +89,7 @@ public class AgentService {
         this.emailService = emailService;
         this.linkedInService = linkedInService;
         this.gitHubService = gitHubService;
+        this.googleCalendarService = googleCalendarService;
         this.telegramService = telegramService;
         this.webhookService = webhookService;
         this.webTools = webTools;
@@ -226,6 +231,9 @@ public class AgentService {
                         attachmentService, user.id())));
         connectionService.gitHubAccount(user.id())
                 .ifPresent(account -> tools.add(new GitHubTools(gitHubService, account.accessToken(), activityService, user.id())));
+        connectionService.googleCalendarAccount(user.id())
+                .ifPresent(account -> tools.add(new GoogleCalendarTools(googleCalendarService, connectionService,
+                        activityService, user.id(), account)));
         return spec.tools(tools.toArray());
     }
 

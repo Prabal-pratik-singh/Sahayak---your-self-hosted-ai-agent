@@ -6,7 +6,7 @@ import { api } from '../api.js'
 // (posts, emails, messages), tasks scheduled / finished / failed, plus
 // conversations that moved.
 
-const ACTION_ICONS = { linkedin: '💼', email: '✉️', telegram: '✈️', discord: '🎮', slack: '📢', github: '🐙' }
+const ACTION_ICONS = { linkedin: '💼', email: '✉️', telegram: '✈️', discord: '🎮', slack: '📢', github: '🐙', calendar: '📅' }
 
 function dayLabel(iso) {
   const d = new Date(iso)

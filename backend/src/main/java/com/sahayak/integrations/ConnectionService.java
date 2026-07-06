@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -41,6 +42,21 @@ public class ConnectionService {
     }
 
     private record GitHubConfig(String accessToken) {
+    }
+
+    /**
+     * The decrypted Google Calendar credentials for one user. Google access
+     * tokens last ~1h; the refresh token mints new ones, so the connection
+     * itself never expires from the user's point of view.
+     */
+    public record GoogleCalendarAccount(String accessToken, String refreshToken, long accessExpiresAtEpoch,
+                                        String displayName) {
+        public boolean accessExpired() {
+            return Instant.now().getEpochSecond() >= accessExpiresAtEpoch - 60;
+        }
+    }
+
+    private record GoogleCalendarConfig(String accessToken, String refreshToken, long accessExpiresAtEpoch) {
     }
 
     private final ConnectionRepository repository;
@@ -137,6 +153,27 @@ public class ConnectionService {
                         c.getDisplayName()));
     }
 
+    public ConnectionInfo saveGoogleCalendar(Long userId, String accessToken, String refreshToken,
+                                             long accessExpiresAtEpoch, String displayName) {
+        Connection connection = upsert(userId, Connection.Type.GOOGLE_CALENDAR);
+        connection.setDisplayName(displayName != null && !displayName.isBlank() ? displayName : "Google Calendar");
+        connection.setEncryptedConfig(crypto.encrypt(toJson(
+                new GoogleCalendarConfig(accessToken, refreshToken, accessExpiresAtEpoch))));
+        // Access tokens auto-refresh, so the connection never "expires" in the UI.
+        connection.setExpiresAt(null);
+        return ConnectionInfo.from(repository.save(connection));
+    }
+
+    public Optional<GoogleCalendarAccount> googleCalendarAccount(Long userId) {
+        return repository.findByUserIdAndType(userId, Connection.Type.GOOGLE_CALENDAR)
+                .map(c -> {
+                    GoogleCalendarConfig config =
+                            fromJson(crypto.decrypt(c.getEncryptedConfig()), GoogleCalendarConfig.class);
+                    return new GoogleCalendarAccount(config.accessToken(), config.refreshToken(),
+                            config.accessExpiresAtEpoch(), c.getDisplayName());
+                });
+    }
+
     /** One-line-per-app summary injected into the system prompt so the model knows what it can really do. */
     public String promptSummary(Long userId) {
         StringBuilder sb = new StringBuilder();
@@ -166,6 +203,11 @@ public class ConnectionService {
                 .map(a -> "- GitHub: CONNECTED as " + a.displayName()
                         + " (createGitHubIssue, listMyGitHubRepos, searchGitHubIssues work).")
                 .orElse("- GitHub: NOT connected."));
+        sb.append('\n');
+        sb.append(googleCalendarAccount(userId)
+                .map(a -> "- Google Calendar: CONNECTED as " + a.displayName()
+                        + " (createCalendarEvent, listUpcomingCalendarEvents work).")
+                .orElse("- Google Calendar: NOT connected."));
         sb.append("\nFor anything NOT connected, the user can set it up on the Integrations page.");
         return sb.toString();
     }

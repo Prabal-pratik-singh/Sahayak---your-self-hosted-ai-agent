@@ -10,7 +10,6 @@ const UNSUPPORTED = [
   { name: 'Instagram', why: 'Posting needs a Business/Creator account + Meta app review. Planned once an approved Meta app exists.' },
   { name: 'X (Twitter)', why: 'The free API tier no longer allows posting reliably; paid tiers start high. On hold.' },
   { name: 'Facebook Pages', why: 'Needs a Meta developer app + review for page permissions. Planned together with Instagram.' },
-  { name: 'Google Calendar', why: 'Needs Google OAuth (cloud project). Meanwhile, Sahayak’s own scheduler covers reminders.' },
 ]
 
 const EMPTY_EMAIL = { host: 'smtp.gmail.com', port: 587, username: '', password: '', fromAddress: '' }
@@ -88,6 +87,15 @@ export default function IntegrationsView() {
   const connectGitHub = async () => {
     try {
       const { url } = await api('/integrations/github/authorize')
+      window.location.href = url
+    } catch (e) {
+      toast(e.message, 'error')
+    }
+  }
+
+  const connectGoogleCalendar = async () => {
+    try {
+      const { url } = await api('/integrations/google-calendar/authorize')
       window.location.href = url
     } catch (e) {
       toast(e.message, 'error')
@@ -201,6 +209,12 @@ export default function IntegrationsView() {
         <Card type="GITHUB" title="GitHub" blurb="Create issues, list repos and search — as you (official OAuth).">
           <button className="btn ghost" onClick={connectGitHub}>
             Connect GitHub
+          </button>
+        </Card>
+
+        <Card type="GOOGLE_CALENDAR" title="Google Calendar" blurb="Create events and check your schedule (official OAuth, connect once).">
+          <button className="btn ghost" onClick={connectGoogleCalendar}>
+            Connect Google Calendar
           </button>
         </Card>
 

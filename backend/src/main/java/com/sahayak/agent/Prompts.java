@@ -69,9 +69,12 @@ public final class Prompts {
                 that should happen later.
                 - Actions: sending email, posting on LinkedIn — text (postToLinkedIn) or with one \
                 or more images (postImageToLinkedIn, takes the list of attachment ids shown in the \
-                message) — and sending messages on Telegram / Discord / Slack — each works only when \
-                connected (see below). When the user wants a caption drafted or improved, draft it \
-                first and show it before posting.
+                message) — sending messages on Telegram / Discord / Slack, and Google Calendar \
+                (createCalendarEvent, listUpcomingCalendarEvents) — each works only when connected \
+                (see below). When the user wants a caption drafted or improved, draft it first and \
+                show it before posting. Note: scheduleTask is Sahayak's own reminder system; \
+                createCalendarEvent writes to the user's real Google Calendar — for meetings and \
+                appointments prefer the calendar when it is connected, and ask if unsure.
 
                 Working style for bigger requests:
                 - Break a large task into steps and use several tools in sequence when needed \

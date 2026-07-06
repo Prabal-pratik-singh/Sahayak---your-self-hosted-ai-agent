@@ -122,6 +122,11 @@ app:
     # the GitHub Models AI provider above (app.github.*).
     client-id: ${GITHUB_OAUTH_CLIENT_ID:}
     client-secret: ${GITHUB_OAUTH_CLIENT_SECRET:}
+  google-oauth:
+    # Create a Google Cloud project (free) with the Calendar API enabled and an
+    # OAuth client to let users connect Google Calendar — see the README.
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
 
 logging:
   level:

@@ -58,6 +58,7 @@ const ACTION_ICONS = {
   discord: '🎮',
   slack: '📢',
   github: '🐙',
+  calendar: '📅',
 }
 
 const PROVIDER_STATUS = {
