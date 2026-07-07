@@ -7,6 +7,8 @@ import com.sahayak.attachments.StoredFile;
 import com.sahayak.auth.AuthenticatedUser;
 import com.sahayak.conversations.ConversationService;
 import com.sahayak.integrations.ConnectionService;
+import com.sahayak.integrations.composio.ComposioEmailTools;
+import com.sahayak.integrations.composio.ComposioService;
 import com.sahayak.integrations.email.EmailService;
 import com.sahayak.integrations.email.EmailTools;
 import com.sahayak.integrations.github.GitHubService;
@@ -66,6 +68,7 @@ public class AgentService {
     private final LinkedInService linkedInService;
     private final GitHubService gitHubService;
     private final GoogleCalendarService googleCalendarService;
+    private final ComposioService composioService;
     private final TelegramService telegramService;
     private final WebhookService webhookService;
     private final WebTools webTools;
@@ -83,6 +86,7 @@ public class AgentService {
                         LinkedInService linkedInService,
                         GitHubService gitHubService,
                         GoogleCalendarService googleCalendarService,
+                        ComposioService composioService,
                         TelegramService telegramService,
                         WebhookService webhookService,
                         WebTools webTools,
@@ -99,6 +103,7 @@ public class AgentService {
         this.linkedInService = linkedInService;
         this.gitHubService = gitHubService;
         this.googleCalendarService = googleCalendarService;
+        this.composioService = composioService;
         this.telegramService = telegramService;
         this.webhookService = webhookService;
         this.webTools = webTools;
@@ -261,8 +266,13 @@ public class AgentService {
                 connectionService.webhookUrl(user.id(), Connection.Type.DISCORD),
                 connectionService.webhookUrl(user.id(), Connection.Type.SLACK),
                 activityService, user.id()));
-        connectionService.emailSettings(user.id())
-                .ifPresent(settings -> tools.add(new EmailTools(emailService, settings, activityService, user.id())));
+        // Exactly ONE email tool per user: direct SMTP wins (private path);
+        // Composio-connected Gmail is the fallback. Same tool name either way.
+        connectionService.emailSettings(user.id()).ifPresentOrElse(
+                settings -> tools.add(new EmailTools(emailService, settings, activityService, user.id())),
+                () -> connectionService.composioGmailAccount(user.id())
+                        .ifPresent(account -> tools.add(new ComposioEmailTools(
+                                composioService, account, activityService, user.id()))));
         connectionService.linkedInAccount(user.id())
                 .ifPresent(account -> tools.add(new LinkedInTools(linkedInService, account, activityService,
                         attachmentService, user.id())));

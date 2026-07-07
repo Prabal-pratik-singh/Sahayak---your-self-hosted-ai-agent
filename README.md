@@ -189,6 +189,19 @@ One-time setup (server owner):
 
 Each user then: Integrations → **Connect Google Calendar** → Google consent screen → done (once — the connection refreshes itself). Try: *"Put 'dentist' on my calendar tomorrow at 5 PM,"* then *"What's on my calendar this week?"*
 
+### One-click Gmail via Composio (optional)
+
+The direct email path (SMTP app password) keeps credentials on **your** server, but the setup trips up non-technical users. This optional path trades that privacy for one-click ease: users connect Gmail through [Composio](https://composio.dev)'s verified Google app instead.
+
+**Be honest with your users (the UI already is):** with this path the Gmail token is held by Composio and mails go through their servers — unlike every direct integration. Composio's free tier covers personal use; heavy usage needs their paid plan (their pricing page is the source of truth).
+
+One-time setup (server owner):
+1. Create a free account at https://app.composio.dev and copy your **API key**.
+2. Create an **auth config** for the **Gmail** toolkit, choosing **Composio-managed auth** (that's the whole point — their verified Google app). Copy its id (starts with `ac_`).
+3. Put both in your environment as `COMPOSIO_API_KEY` / `COMPOSIO_GMAIL_AUTH_CONFIG_ID` (`.env` for Docker) and restart the backend.
+
+Each user then: Integrations → Email card → **Connect Gmail via Composio (1 click)** → Google consent → done. Direct SMTP always wins if a user has both connected.
+
 ---
 
 ## Settings (environment variables)
@@ -214,6 +227,7 @@ Each user then: Integrations → **Connect Google Calendar** → Google consent 
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | for LinkedIn | — | From your LinkedIn developer app |
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | for GitHub | — | From your GitHub OAuth app (separate from `GITHUB_MODELS_KEY`) |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | for Google Calendar | — | From your Google Cloud OAuth client (Calendar API enabled) |
+| `COMPOSIO_API_KEY` / `COMPOSIO_GMAIL_AUTH_CONFIG_ID` | for one-click Gmail | — | From your Composio account (optional third-party path) |
 | `APP_FRONTEND_URL` | when deployed | `http://localhost:5173` | Browser app address (redirects + CORS) |
 | `APP_BASE_URL` | when deployed | `http://localhost:8080` | Public backend address (LinkedIn redirect) |
 | `TZ` (Docker) | no | `UTC` | Server timezone, so "tomorrow 6 PM" is your 6 PM |

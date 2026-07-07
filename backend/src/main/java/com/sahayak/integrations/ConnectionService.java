@@ -59,6 +59,17 @@ public class ConnectionService {
     private record GoogleCalendarConfig(String accessToken, String refreshToken, long accessExpiresAtEpoch) {
     }
 
+    /**
+     * Gmail connected through Composio (the optional middleman path). We hold
+     * no Google credentials at all — only Composio's account reference; the
+     * actual token lives with Composio.
+     */
+    public record ComposioGmailAccount(String connectedAccountId, String userTag, String displayName) {
+    }
+
+    private record ComposioGmailConfig(String connectedAccountId, String userTag) {
+    }
+
     private final ConnectionRepository repository;
     private final CryptoService crypto;
     private final ObjectMapper objectMapper;
@@ -174,12 +185,33 @@ public class ConnectionService {
                 });
     }
 
+    public ConnectionInfo saveComposioGmail(Long userId, String connectedAccountId, String userTag,
+                                            String displayName) {
+        Connection connection = upsert(userId, Connection.Type.GMAIL_COMPOSIO);
+        connection.setDisplayName(displayName != null && !displayName.isBlank() ? displayName : "Gmail via Composio");
+        connection.setEncryptedConfig(crypto.encrypt(toJson(new ComposioGmailConfig(connectedAccountId, userTag))));
+        connection.setExpiresAt(null);
+        return ConnectionInfo.from(repository.save(connection));
+    }
+
+    public Optional<ComposioGmailAccount> composioGmailAccount(Long userId) {
+        return repository.findByUserIdAndType(userId, Connection.Type.GMAIL_COMPOSIO)
+                .map(c -> {
+                    ComposioGmailConfig config =
+                            fromJson(crypto.decrypt(c.getEncryptedConfig()), ComposioGmailConfig.class);
+                    return new ComposioGmailAccount(config.connectedAccountId(), config.userTag(),
+                            c.getDisplayName());
+                });
+    }
+
     /** One-line-per-app summary injected into the system prompt so the model knows what it can really do. */
     public String promptSummary(Long userId) {
         StringBuilder sb = new StringBuilder();
         sb.append(emailSettings(userId)
                 .map(s -> "- Email sending: CONNECTED (sends from " + s.effectiveFrom() + ").")
-                .orElse("- Email sending: NOT connected."));
+                .orElseGet(() -> composioGmailAccount(userId)
+                        .map(a -> "- Email sending: CONNECTED (Gmail via Composio — sendEmail works).")
+                        .orElse("- Email sending: NOT connected.")));
         sb.append('\n');
         sb.append(linkedInAccount(userId)
                 .map(a -> a.expired()

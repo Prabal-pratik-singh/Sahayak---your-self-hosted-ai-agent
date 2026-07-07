@@ -46,6 +46,7 @@ public class SecurityConfig {
                                 "/api/integrations/linkedin/callback",
                                 "/api/integrations/github/callback",
                                 "/api/integrations/google-calendar/callback",
+                                "/api/integrations/composio-gmail/callback",
                                 "/error")
                         .permitAll()
                         .anyRequest().authenticated())

@@ -102,8 +102,19 @@ export default function IntegrationsView() {
     }
   }
 
-  const Card = ({ type, title, blurb, children }) => {
-    const c = connected(type)
+  const connectComposioGmail = async () => {
+    try {
+      const { url } = await api('/integrations/composio-gmail/authorize')
+      window.location.href = url
+    } catch (e) {
+      toast(e.message, 'error')
+    }
+  }
+
+  // altType: a second connection type that also counts as "this card is
+  // connected" (the Email card: direct SMTP or Gmail-via-Composio).
+  const Card = ({ type, altType, title, blurb, children }) => {
+    const c = connected(type) || (altType ? connected(altType) : undefined)
     return (
       <div className="card integ-card">
         <div className="integ-head">
@@ -130,7 +141,7 @@ export default function IntegrationsView() {
   return (
     <div className="integrations view-in">
       <div className="integ-grid">
-        <Card type="EMAIL" title="Email (any provider)" blurb="Send email from your own mailbox via SMTP.">
+        <Card type="EMAIL" altType="GMAIL_COMPOSIO" title="Email (any provider)" blurb="Send email from your own mailbox via SMTP.">
           {openForm === 'EMAIL' ? (
             <form
               className="integ-form"
@@ -198,6 +209,24 @@ export default function IntegrationsView() {
               Connect email
             </button>
           )}
+          <div className="integ-alt">
+            <div className="integ-alt-head">Finding that difficult? Connect with Composio instead</div>
+            <button className="btn ghost" onClick={connectComposioGmail}>
+              Connect Gmail via Composio (1 click)
+            </button>
+            <p className="hint">
+              <b>Direct (above, recommended):</b> fully private — your credentials stay encrypted on
+              this server only. Takes ~2 minutes with an app password.
+              <br />
+              <b>Via Composio (this button):</b> one click, no passwords — but your Gmail token is
+              held by Composio, a third-party service, and emails pass through their servers.
+            </p>
+            <p className="hint">
+              Composio tiers: the <b>free tier</b> covers personal use; heavy use needs their{' '}
+              <a href="https://composio.dev/pricing" target="_blank" rel="noopener noreferrer">paid plan</a>.
+              Their pricing page is the source of truth.
+            </p>
+          </div>
         </Card>
 
         <Card type="LINKEDIN" title="LinkedIn" blurb="Publish posts on your own profile (official OAuth).">

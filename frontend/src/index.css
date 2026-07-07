@@ -1882,6 +1882,29 @@ kbd {
   margin-top: 14px;
 }
 
+/* alternative connect path (e.g. Gmail via Composio) below the direct one */
+.integ-alt {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--stroke);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.integ-alt-head {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.integ-alt .hint a {
+  color: var(--accent);
+}
+
 /* attachments shown inside a sent message bubble */
 .msg-attachments {
   display: flex;

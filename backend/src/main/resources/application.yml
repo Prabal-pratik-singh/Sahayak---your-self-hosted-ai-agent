@@ -131,6 +131,13 @@ app:
     # OAuth client to let users connect Google Calendar — see the README.
     client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
     client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+  composio:
+    # OPTIONAL one-click Gmail via Composio (composio.dev) — a third-party
+    # middleman, unlike every direct integration. The owner creates a free
+    # Composio account, a Gmail auth config (Composio-managed auth), and
+    # pastes both values here. See README "One-click Gmail via Composio".
+    api-key: ${COMPOSIO_API_KEY:}
+    gmail-auth-config-id: ${COMPOSIO_GMAIL_AUTH_CONFIG_ID:}
 
 logging:
   level:
