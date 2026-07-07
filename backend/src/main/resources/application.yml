@@ -116,6 +116,10 @@ app:
     # Create an app at https://developer.linkedin.com to enable LinkedIn posting.
     client-id: ${LINKEDIN_CLIENT_ID:}
     client-secret: ${LINKEDIN_CLIENT_SECRET:}
+    # Only for multi-image posts. LinkedIn sunsets YYYYMM API versions after
+    # ~1 year; the code tries several known versions automatically — set this
+    # only if all of them have expired (error: "version is not active").
+    api-version: ${LINKEDIN_API_VERSION:}
   github-oauth:
     # Create an OAuth app at https://github.com/settings/developers to let users
     # connect GitHub (create issues, list repos, search). This is SEPARATE from

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -37,12 +38,18 @@ public class LinkedInService {
     private static final String ASSETS_URL = "https://api.linkedin.com/v2/assets?action=registerUpload";
     // The classic ugcPosts API above renders only ONE image per post. Posts
     // with SEVERAL images need LinkedIn's newer versioned API (below), which
-    // requires a LinkedIn-Version header (YYYYMM, monthly releases, valid ~1
-    // year — bump this if LinkedIn ever rejects it as expired).
+    // requires a LinkedIn-Version header (YYYYMM). LinkedIn sunsets each
+    // version after ~1 year, so a hardcoded value WILL eventually die — we
+    // try these candidates newest-first, skip any LinkedIn rejects as
+    // inactive, and remember the one that works. LINKEDIN_API_VERSION in the
+    // environment overrides the list if LinkedIn ever outpaces it.
     private static final String REST_IMAGES_URL = "https://api.linkedin.com/rest/images?action=initializeUpload";
     private static final String REST_POSTS_URL = "https://api.linkedin.com/rest/posts";
-    private static final String LINKEDIN_VERSION = "202504";
+    private static final List<String> VERSION_CANDIDATES = List.of("202606", "202601", "202507");
     private static final String SCOPES = "openid profile email w_member_social";
+
+    /** The last LinkedIn-Version that worked — tried first on later calls. */
+    private volatile String knownGoodVersion;
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Token(@JsonProperty("access_token") String accessToken,
@@ -57,15 +64,18 @@ public class LinkedInService {
     private final String clientId;
     private final String clientSecret;
     private final String baseUrl;
+    private final String apiVersionOverride;
 
     public LinkedInService(RestClient.Builder restClientBuilder,
                            @Value("${app.linkedin.client-id:}") String clientId,
                            @Value("${app.linkedin.client-secret:}") String clientSecret,
-                           @Value("${app.base-url:http://localhost:8080}") String baseUrl) {
+                           @Value("${app.base-url:http://localhost:8080}") String baseUrl,
+                           @Value("${app.linkedin.api-version:}") String apiVersionOverride) {
         this.http = restClientBuilder.build();
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.baseUrl = baseUrl;
+        this.apiVersionOverride = apiVersionOverride;
     }
 
     public boolean isConfigured() {
@@ -221,6 +231,52 @@ public class LinkedInService {
             return postWithImage(accessToken, personSub, text, images.get(0).bytes(), images.get(0).mime());
         }
 
+        // LinkedIn retires API versions over time: walk the candidates until
+        // one is accepted, and remember it for the next post.
+        RestClientResponseException versionRejected = null;
+        for (String version : versionsToTry()) {
+            try {
+                String url = postMultiImage(version, accessToken, personSub, text, images);
+                knownGoodVersion = version;
+                return url;
+            } catch (RestClientResponseException e) {
+                if (isVersionNotActive(e)) {
+                    versionRejected = e;
+                    continue; // sunset version — try the next candidate
+                }
+                throw e;
+            }
+        }
+        throw versionRejected != null ? versionRejected
+                : new IllegalStateException("No LinkedIn API version candidates configured.");
+    }
+
+    /** Configured override first, then the last known-good, then the built-in list. */
+    private List<String> versionsToTry() {
+        List<String> versions = new java.util.ArrayList<>();
+        if (apiVersionOverride != null && !apiVersionOverride.isBlank()) {
+            versions.add(apiVersionOverride.trim());
+        }
+        String remembered = knownGoodVersion;
+        if (remembered != null && !versions.contains(remembered)) {
+            versions.add(remembered);
+        }
+        for (String candidate : VERSION_CANDIDATES) {
+            if (!versions.contains(candidate)) {
+                versions.add(candidate);
+            }
+        }
+        return versions;
+    }
+
+    /** LinkedIn's rejection of a sunset/unknown LinkedIn-Version header. */
+    private static boolean isVersionNotActive(RestClientResponseException e) {
+        String body = e.getResponseBodyAsString().toLowerCase();
+        return body.contains("version") && (body.contains("is not active") || body.contains("not supported"));
+    }
+
+    private String postMultiImage(String linkedInVersion, String accessToken, String personSub,
+                                  String text, List<ImagePayload> images) {
         String author = "urn:li:person:" + personSub;
 
         // 1) initialize + upload every image, collecting its urn:li:image URN
@@ -229,7 +285,7 @@ public class LinkedInService {
             JsonNode initialized = http.post()
                     .uri(REST_IMAGES_URL)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-                    .header("LinkedIn-Version", LINKEDIN_VERSION)
+                    .header("LinkedIn-Version", linkedInVersion)
                     .header("X-Restli-Protocol-Version", "2.0.0")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("initializeUploadRequest", Map.of("owner", author)))
@@ -269,7 +325,7 @@ public class LinkedInService {
         ResponseEntity<String> response = http.post()
                 .uri(REST_POSTS_URL)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-                .header("LinkedIn-Version", LINKEDIN_VERSION)
+                .header("LinkedIn-Version", linkedInVersion)
                 .header("X-Restli-Protocol-Version", "2.0.0")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body)
