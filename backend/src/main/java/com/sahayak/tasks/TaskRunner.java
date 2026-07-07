@@ -4,6 +4,8 @@ import com.sahayak.agent.AgentService;
 import com.sahayak.auth.AuthenticatedUser;
 import com.sahayak.auth.User;
 import com.sahayak.auth.UserRepository;
+import com.sahayak.monitoring.AiErrorCategory;
+import com.sahayak.monitoring.ProviderException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -29,6 +31,11 @@ public class TaskRunner {
     private static final Logger log = LoggerFactory.getLogger(TaskRunner.class);
     private static final int MAX_RESULT_LENGTH = 7900;
     private static final Duration STUCK_AFTER = Duration.ofMinutes(15);
+    // A TEMPORARY provider problem (daily quota, provider down) must not kill
+    // a scheduled task: postpone and retry instead. 30 min × 48 = a full day
+    // of retries, enough to ride out any daily-quota reset.
+    private static final int RETRY_DELAY_MINUTES = 30;
+    private static final int MAX_RETRIES = 48;
 
     private final ScheduledTaskRepository repository;
     private final UserRepository userRepository;
@@ -91,12 +98,45 @@ public class TaskRunner {
             task.setStatus(ScheduledTask.Status.DONE);
             task.setResult(truncate(result));
             log.info("Task #{} done", task.getId());
+        } catch (ProviderException e) {
+            if (isTransient(e.category()) && task.getRetries() < MAX_RETRIES) {
+                postpone(task, e);
+            } else {
+                log.error("Task #{} failed ({})", task.getId(), e.category(), e);
+                task.setStatus(ScheduledTask.Status.FAILED);
+                task.setResult(truncate("Error: " + e.friendlyMessage()));
+            }
         } catch (Exception e) {
             log.error("Task #{} failed", task.getId(), e);
             task.setStatus(ScheduledTask.Status.FAILED);
             task.setResult(truncate("Error: " + e.getMessage()));
         }
         repository.save(task);
+    }
+
+    /**
+     * The AI engine had a passing problem (quota exhausted, provider down…) —
+     * the task itself is fine, so it goes back to PENDING a little later
+     * instead of dying. Quota usually resets within hours.
+     */
+    private void postpone(ScheduledTask task, ProviderException e) {
+        task.setRetries(task.getRetries() + 1);
+        task.setStatus(ScheduledTask.Status.PENDING);
+        task.setStartedAt(null);
+        task.setRunAt(LocalDateTime.now().plusMinutes(RETRY_DELAY_MINUTES));
+        task.setResult(truncate("Not run yet — " + e.friendlyMessage()
+                + " Retrying automatically at " + task.getRunAt().toLocalTime().withSecond(0).withNano(0)
+                + " (attempt " + task.getRetries() + " of " + MAX_RETRIES + ")."));
+        log.warn("Task #{} hit a transient provider problem ({}) — postponed to {} (retry {}/{})",
+                task.getId(), e.category(), task.getRunAt(), task.getRetries(), MAX_RETRIES);
+    }
+
+    /** Problems that heal on their own — retrying makes sense. A bad API key does not. */
+    private static boolean isTransient(AiErrorCategory category) {
+        return category == AiErrorCategory.QUOTA
+                || category == AiErrorCategory.PROVIDER_DOWN
+                || category == AiErrorCategory.NETWORK
+                || category == AiErrorCategory.TIMEOUT;
     }
 
     /** Safety net for tasks claimed but never finished (e.g. by another, crashed instance). */

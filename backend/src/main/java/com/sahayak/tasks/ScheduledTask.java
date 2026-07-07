@@ -49,6 +49,14 @@ public class ScheduledTask {
     /** When execution actually began — used to detect tasks stuck in RUNNING. */
     private LocalDateTime startedAt;
 
+    /**
+     * How many times this task was postponed by a TEMPORARY provider problem
+     * (quota exhausted, provider down). Bounded by TaskRunner so a task can't
+     * retry forever. The SQL default keeps rows from before this column alive.
+     */
+    @Column(nullable = false, columnDefinition = "integer not null default 0")
+    private int retries;
+
     /** AI provider this task was scheduled with ("anthropic", "openai", "gemini"). */
     @Column(length = 20)
     private String provider;
@@ -110,6 +118,14 @@ public class ScheduledTask {
 
     public void setStartedAt(LocalDateTime startedAt) {
         this.startedAt = startedAt;
+    }
+
+    public int getRetries() {
+        return retries;
+    }
+
+    public void setRetries(int retries) {
+        this.retries = retries;
     }
 
     public String getProvider() {
