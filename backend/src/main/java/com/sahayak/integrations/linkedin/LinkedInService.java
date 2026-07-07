@@ -309,7 +309,10 @@ public class LinkedInService {
             imageRefs.add(Map.of("id", imageUrn));
         }
 
-        // 2) one post referencing all uploaded images
+        // 2) one post referencing all uploaded images.
+        // (isReshareDisabledByViewer is deliberately absent: newer API
+        // versions removed the field and 422 on it; the default — resharing
+        // allowed — is what we want anyway.)
         Map<String, Object> body = Map.of(
                 "author", author,
                 "commentary", escapeLittleText(text),
@@ -319,8 +322,7 @@ public class LinkedInService {
                         "targetEntities", List.of(),
                         "thirdPartyDistributionChannels", List.of()),
                 "content", Map.of("multiImage", Map.of("images", imageRefs)),
-                "lifecycleState", "PUBLISHED",
-                "isReshareDisabledByViewer", false);
+                "lifecycleState", "PUBLISHED");
 
         ResponseEntity<String> response = http.post()
                 .uri(REST_POSTS_URL)
