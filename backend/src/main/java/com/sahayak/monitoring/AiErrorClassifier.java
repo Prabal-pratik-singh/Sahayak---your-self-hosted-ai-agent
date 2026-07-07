@@ -28,6 +28,12 @@ public final class AiErrorClassifier {
                 return AiErrorCategory.NETWORK;
             }
             String m = t.getMessage() == null ? "" : t.getMessage().toLowerCase();
+            // The MODEL botched a tool call's syntax (llama does this under
+            // many tools) — the request itself was fine, a retry usually works.
+            if (m.contains("tool_use_failed") || m.contains("failed to call a function")
+                    || m.contains("tool call validation failed")) {
+                return AiErrorCategory.TOOL_CALL_FLAKE;
+            }
             if (m.contains("429") || m.contains("quota") || m.contains("rate limit")
                     || m.contains("rate_limit") || m.contains("resource_exhausted")
                     || m.contains("too many requests")) {
@@ -69,6 +75,9 @@ public final class AiErrorClassifier {
                     + "missing permissions. The server owner should check that key.";
             case MODEL_UNAVAILABLE -> providerLabel + " no longer offers the configured model (providers "
                     + "rename or retire them). The server owner should update the model name for " + providerLabel + ".";
+            case TOOL_CALL_FLAKE -> providerLabel + "'s model fumbled while using a tool — a known quirk "
+                    + "of free Llama models. It was retried automatically; if you still see this, send the "
+                    + "message again or switch to Gemini for action-heavy commands.";
             case PROVIDER_DOWN -> providerLabel + " seems to be having problems right now. "
                     + "Try again shortly, or switch to another AI.";
             case NETWORK -> "Could not reach " + providerLabel + " — the server may have lost its "

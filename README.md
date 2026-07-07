@@ -199,7 +199,7 @@ Each user then: Integrations → **Connect Google Calendar** → Google consent 
 | `OPENAI_API_KEY` | optional* | — | ChatGPT API key (https://platform.openai.com) |
 | `GEMINI_API_KEY` | optional* | — | Gemini API key (https://aistudio.google.com/apikey) |
 | `GROQ_API_KEY` | optional* | — | Groq API key — free tier (https://console.groq.com/keys) |
-| `GROQ_MODEL` | no | `llama-3.3-70b-versatile` | Which Groq model to use |
+| `GROQ_MODEL` | no |  `openai/gpt-oss-120b` | Which Groq model to use |
 | `APP_DEFAULT_AI` | no | first configured | Default provider: `anthropic` / `openai` / `gemini` / `groq` |
 
 \* Server keys are shared defaults. With none set, the server runs **BYOK-only**: each user adds their own key in **Settings → AI engine keys** (verified with a real test call, stored AES-encrypted, used only for their account).

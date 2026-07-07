@@ -82,7 +82,7 @@ app:
     # https://console.groq.com/keys — free tier with generous limits.
     # Groq speaks the OpenAI protocol, so no extra SDK is needed.
     api-key: ${GROQ_API_KEY:}
-    model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+    model: ${GROQ_MODEL:openai/gpt-oss-120b}
   github:
     # https://github.com/settings/tokens — any GitHub account gets free
     # (rate-limited) model access; the key is a GitHub token.

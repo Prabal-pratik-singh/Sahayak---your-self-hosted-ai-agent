@@ -19,6 +19,8 @@ import com.sahayak.integrations.messaging.MessagingTools;
 import com.sahayak.integrations.messaging.TelegramService;
 import com.sahayak.integrations.messaging.WebhookService;
 import com.sahayak.integrations.Connection;
+import com.sahayak.monitoring.AiErrorCategory;
+import com.sahayak.monitoring.AiErrorClassifier;
 import com.sahayak.monitoring.ProviderHealthService;
 import com.sahayak.notes.AgentNote;
 import com.sahayak.notes.AgentNoteRepository;
@@ -27,6 +29,8 @@ import com.sahayak.tasks.ScheduledTask;
 import com.sahayak.tasks.ScheduledTaskRepository;
 import com.sahayak.tasks.SchedulerTools;
 import com.sahayak.web.WebTools;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.content.Media;
@@ -34,9 +38,12 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
 import reactor.core.publisher.Flux;
+import reactor.util.retry.Retry;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -47,6 +54,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class AgentService {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentService.class);
 
     private final ProviderAccessService access;
     private final ScheduledTaskRepository taskRepository;
@@ -107,11 +116,29 @@ public class AgentService {
         var resolved = routeForImages(user.id(), chosen, files);
         String note = visionNote(chosen, resolved);
         try {
-            String reply = prepare(resolved, user, conversationRef, message, files).call().content();
+            String reply = withFlakeRetry(() ->
+                    prepare(resolved, user, conversationRef, message, files).call().content());
             health.recordSuccess(resolved.healthScope());
             return note.isEmpty() ? reply : note + reply;
         } catch (RuntimeException e) {
             throw health.failure(resolved.healthScope(), resolved.label(), e);
+        }
+    }
+
+    /**
+     * Free Llama models occasionally emit a tool call in broken syntax and the
+     * provider 400s the whole turn (Groq: "tool_use_failed"). The request was
+     * fine — a single invisible retry almost always succeeds.
+     */
+    private static String withFlakeRetry(Supplier<String> call) {
+        try {
+            return call.get();
+        } catch (RuntimeException e) {
+            if (AiErrorClassifier.classify(e) != AiErrorCategory.TOOL_CALL_FLAKE) {
+                throw e;
+            }
+            log.info("Model fumbled a tool call — retrying the turn once");
+            return call.get();
         }
     }
 
@@ -128,6 +155,16 @@ public class AgentService {
         } catch (RuntimeException e) {
             throw health.failure(resolved.healthScope(), resolved.label(), e);
         }
+        // Same invisible retry as chat(): a fumbled tool call usually dies
+        // before any token is emitted, so resubscribing is safe — and we only
+        // retry when NOTHING has reached the user yet (no duplicated text).
+        AtomicBoolean emitted = new AtomicBoolean(false);
+        stream = stream
+                .doOnNext(t -> emitted.set(true))
+                .retryWhen(Retry.max(1)
+                        .filter(e -> !emitted.get()
+                                && AiErrorClassifier.classify(e) == AiErrorCategory.TOOL_CALL_FLAKE)
+                        .doBeforeRetry(s -> log.info("Model fumbled a tool call — retrying the stream once")));
         if (!note.isEmpty()) {
             stream = Flux.just(note).concatWith(stream);
         }
@@ -165,8 +202,8 @@ public class AgentService {
         String message = "Automated run of scheduled task #%d. Execute this instruction now: %s"
                 .formatted(task.getId(), task.getInstruction());
         try {
-            String result = request(resolved, user,
-                    "u" + user.id() + ":task-" + task.getId(), message, true, List.of()).call().content();
+            String result = withFlakeRetry(() -> request(resolved, user,
+                    "u" + user.id() + ":task-" + task.getId(), message, true, List.of()).call().content());
             health.recordSuccess(resolved.healthScope());
             return result;
         } catch (RuntimeException e) {

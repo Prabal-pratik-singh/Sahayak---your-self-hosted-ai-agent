@@ -39,7 +39,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
       GITHUB_MODELS_KEY: ${GITHUB_MODELS_KEY:-}
       CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
       CEREBRAS_MODEL: ${CEREBRAS_MODEL:-llama-3.3-70b}

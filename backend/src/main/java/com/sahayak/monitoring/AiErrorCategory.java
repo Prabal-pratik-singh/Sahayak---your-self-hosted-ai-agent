@@ -5,6 +5,7 @@ public enum AiErrorCategory {
     INVALID_KEY,       // 401/403 — wrong, expired, or under-permissioned API key
     QUOTA,             // 429 — rate limit or free-tier quota exhausted
     MODEL_UNAVAILABLE, // 404 / model decommissioned or renamed by the provider
+    TOOL_CALL_FLAKE,   // the model emitted a malformed tool call (Groq: tool_use_failed) — retry usually fixes it
     PROVIDER_DOWN,     // 5xx / "overloaded" — the provider itself is struggling
     NETWORK,           // DNS/connect failures — the server can't reach the provider
     TIMEOUT,           // no answer in time

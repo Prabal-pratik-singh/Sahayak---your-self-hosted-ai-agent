@@ -76,7 +76,7 @@ public class ChatClientFactory {
                              @Value("${spring.ai.anthropic.chat.options.model:claude-sonnet-5}") String anthropicModel,
                              @Value("${spring.ai.openai.chat.options.model:gpt-5-mini}") String openaiModel,
                              @Value("${spring.ai.google.genai.chat.options.model:gemini-2.5-flash}") String geminiModel,
-                             @Value("${app.groq.model:llama-3.3-70b-versatile}") String groqModel,
+                             @Value("${app.groq.model:openai/gpt-oss-120b}") String groqModel,
                              @Value("${app.github.model:openai/gpt-4o-mini}") String githubModel,
                              @Value("${app.cerebras.model:llama-3.3-70b}") String cerebrasModel,
                              @Value("${app.mistral.model:mistral-small-latest}") String mistralModel,

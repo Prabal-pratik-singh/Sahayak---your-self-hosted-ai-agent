@@ -136,7 +136,8 @@ public class TaskRunner {
         return category == AiErrorCategory.QUOTA
                 || category == AiErrorCategory.PROVIDER_DOWN
                 || category == AiErrorCategory.NETWORK
-                || category == AiErrorCategory.TIMEOUT;
+                || category == AiErrorCategory.TIMEOUT
+                || category == AiErrorCategory.TOOL_CALL_FLAKE;
     }
 
     /** Safety net for tasks claimed but never finished (e.g. by another, crashed instance). */
