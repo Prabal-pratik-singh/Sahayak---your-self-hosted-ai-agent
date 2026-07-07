@@ -6,7 +6,7 @@ export const SpeechRecognitionImpl =
 
 export const speechSupported = Boolean(SpeechRecognitionImpl)
 
-export function speak(text, { rate = 1.05, onStart, onEnd } = {}) {
+export function speak(text, { rate = 1.05, lang, onStart, onEnd } = {}) {
   const synth = window.speechSynthesis
   if (!synth || !text) {
     onEnd?.()
@@ -18,7 +18,7 @@ export function speak(text, { rate = 1.05, onStart, onEnd } = {}) {
     .replace(/[*_#`~>|•]/g, ' ')
     .slice(0, 900)
   const utterance = new SpeechSynthesisUtterance(clean)
-  utterance.lang = navigator.language || 'en-IN'
+  utterance.lang = lang || navigator.language || 'en-IN'
   utterance.rate = rate
   utterance.onstart = () => onStart?.()
   utterance.onend = () => onEnd?.()
@@ -34,10 +34,12 @@ export function stopSpeaking() {
  * Creates a recognizer. Call .start(); it reports interim text as the user
  * speaks and final segments when they pause. Returns null if unsupported.
  */
-export function createRecognizer({ continuous = false, onInterim, onFinal, onEnd, onError } = {}) {
+export function createRecognizer({ continuous = false, lang, onInterim, onFinal, onEnd, onError } = {}) {
   if (!SpeechRecognitionImpl) return null
   const recognition = new SpeechRecognitionImpl()
-  recognition.lang = navigator.language || 'en-IN'
+  // The right language/accent model matters more than anything else for
+  // recognition accuracy — the caller passes the user's Settings choice.
+  recognition.lang = lang || navigator.language || 'en-IN'
   recognition.interimResults = true
   recognition.continuous = continuous
 

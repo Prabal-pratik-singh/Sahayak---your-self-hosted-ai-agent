@@ -294,6 +294,23 @@ export default function SettingsView() {
             <span />
           </button>
         </div>
+        <div className="setting-row">
+          <span>Voice language / accent</span>
+          <select
+            value={settings.voiceLang || 'en-IN'}
+            onChange={(e) => settings.set({ voiceLang: e.target.value })}
+            aria-label="Voice recognition language"
+          >
+            <option value="en-IN">English (India)</option>
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="hi-IN">हिन्दी (Hindi)</option>
+          </select>
+        </div>
+        <p className="hint">
+          Picking the language that matches how you actually speak is the biggest fix for
+          misheard words — e.g. English (India) for an Indian accent.
+        </p>
       </section>
 
       <AiKeysCard />

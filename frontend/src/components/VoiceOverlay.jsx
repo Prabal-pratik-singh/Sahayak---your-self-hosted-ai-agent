@@ -113,6 +113,7 @@ export default function VoiceOverlay({ onClose }) {
 
     const recognizer = createRecognizer({
       continuous: true,
+      lang: settings.voiceLang,
       onInterim: onHeard,
       onFinal: (_segment, fullBuffer) => onHeard(fullBuffer),
       onEnd: () => {
@@ -181,7 +182,7 @@ export default function VoiceOverlay({ onClose }) {
 
     const clean = answer.replace(/https?:\/\/\S+/g, 'link').replace(/[*_#`~>|•]/g, ' ').slice(0, 900)
     const utterance = new SpeechSynthesisUtterance(clean)
-    utterance.lang = navigator.language || 'en-IN'
+    utterance.lang = settings.voiceLang || navigator.language || 'en-IN'
     utterance.rate = 1.05
 
     let started = false

@@ -45,6 +45,11 @@ public final class Prompts {
                 : """
                 MODE: live chat with the user (they may be listening by voice, so keep replies \
                 short, natural and speakable — no long lists or markdown unless asked). \
+                Messages may come from speech recognition and contain misheard words, missing \
+                punctuation or oddly split words ("post it on linked in tomorrow at 9 a.m."): \
+                interpret the INTENDED meaning charitably instead of taking transcription \
+                mistakes literally, and if a key detail (a name, address, amount, or exact \
+                text to publish) seems garbled, quickly confirm it. \
                 Before sending an email or posting publicly, show the exact final content and \
                 ask the user to confirm once. After they confirm, execute without re-asking.""";
 

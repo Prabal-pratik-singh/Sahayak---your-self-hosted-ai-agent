@@ -13,6 +13,27 @@ const SUGGESTIONS = [
   'Remind yourself to say hello in 2 minutes',
 ]
 
+// Shown while the agent works but hasn't produced any text yet. Tool turns
+// (posting, searching, calendar…) can take 30+ seconds with zero tokens — an
+// empty bubble looks like a glitch, so escalate the label as time passes.
+function ThinkingIndicator() {
+  const [label, setLabel] = useState('Thinking')
+  useEffect(() => {
+    const t1 = setTimeout(() => setLabel('Working on it'), 6000)
+    const t2 = setTimeout(() => setLabel('Still working — actions like posting can take up to a minute'), 20000)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
+  }, [])
+  return (
+    <span className="thinking-line" role="status">
+      {label}
+      <span className="thinking-dots" aria-hidden="true"><i /><i /><i /></span>
+    </span>
+  )
+}
+
 // Attachment thumbnails/chips shown inside a sent message bubble.
 function MessageAttachments({ attachments }) {
   if (!attachments?.length) return null
@@ -62,7 +83,8 @@ function Bubble({ message, user, onRetry }) {
       <div className="msg-bubble">
         {message.error && <span className="msg-error-label">Something went wrong</span>}
         {message.error ? message.content : <Markdown>{message.content}</Markdown>}
-        {message.streaming && <span className="caret" />}
+        {message.streaming && !message.content && <ThinkingIndicator />}
+        {message.streaming && message.content && <span className="caret" />}
         {message.error && message.retryFor && (
           <button className="btn ghost retry-btn" onClick={() => onRetry(message.retryFor)}>
             Try again
@@ -302,6 +324,7 @@ export default function ChatView() {
     }
     stopSpeaking()
     const recognizer = createRecognizer({
+      lang: settings.voiceLang,
       onInterim: (text) => setInput(text),
       onEnd: (finalText) => {
         setListening(false)

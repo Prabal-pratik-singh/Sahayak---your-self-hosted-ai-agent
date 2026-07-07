@@ -10,6 +10,9 @@ const DEFAULTS = {
   accent: 'cyan', // 'cyan' | 'amber' | 'violet'
   wakeWord: '', // empty = respond to everything; set a word for Jarvis-style gating
   voiceReplies: false,
+  // Speech-recognition language. en-IN understands Indian-accented English far
+  // better than the browser default (usually en-US) — the main mishearing fix.
+  voiceLang: 'en-IN',
   defaultProvider: '', // '' = server default
 }
 
